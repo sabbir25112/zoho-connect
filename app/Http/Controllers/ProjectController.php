@@ -216,6 +216,7 @@ class ProjectController extends Controller
     private function getSubTasks($task)
     {
         try {
+            if (!isset($task['link']['subtask']['url'])) return [];
             $sub_task_api = $task['link']['subtask']['url'];
             $response = Http::withToken($this->token)->get($sub_task_api);
             if ($response->successful()) {
@@ -335,7 +336,8 @@ class ProjectController extends Controller
             $time_sheet_api = $project['link']['timesheet']['url'] . $query_string;
             $response = Http::withToken($this->token)->get($time_sheet_api);
             if ($response->successful()) {
-                $time_logs = $response->json()['timelogs']['date'];
+                $response_json = $response->json();
+                $time_logs = $response_json['timelogs']['date'] ?? [];
                 foreach ($time_logs as $time_log)
                 {
                     foreach ($time_log['tasklogs'] as $tasklog)
