@@ -23,6 +23,7 @@ Route::group(['namespace' => 'App\Http\Controllers'], function () {
 
     Route::group(['middleware' => 'check.access.token'], function () {
         Route::get('sync-projects', 'ProjectController@sync')->name('sync-projects');
+        Route::post('sync-timesheets', 'ProjectController@syncTimeSheet')->name('sync-timesheet');
     });
 });
 

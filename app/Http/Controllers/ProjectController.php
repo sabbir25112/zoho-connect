@@ -5,8 +5,10 @@ use App\Models\Settings;
 use App\Models\SubTask;
 use App\Models\Task;
 use App\Models\Tasklist;
+use App\Models\TimeSheet;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -25,7 +27,7 @@ class ProjectController extends Controller
     {
         // return json_decode('[{"storage_type":"ZOHO_DOCS","trial_enabled":false,"can_create_project":true,"gmt_time_zone":"(GMT 10:0) Eastern Standard Time (New South Wales)","project_count":{"active":2},"role":"Employee","is_sprints_integrated":false,"avail_user_count":-1,"is_crm_partner":false,"link":{"project":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/"}},"bug_plan":"Enterprise","can_add_template":true,"locale":{"country":"United States","code":"en_US","language":"English"},"IS_LOGHR_RESTRICTEDBY_WORKHR":false,"layouts":{"projects":{"module_id":"685798000007722005"},"tasks":{"module_id":"685798000006116005"}},"gmt_time_zone_offset":36000000,"new_user_plan":false,"available_projects":-1,"default":false,"id":36249008,"bug_plural":"Bugs","is_new_plan":false,"plan":"Enterprise","percentage_calculation":"based_on_status","settings":{"business_hours":{"business_end":1020,"business_start":540},"street_address":"Suite 4, Level 2, 22 George Street","country":"Australia","default_dependency_type":"finish-start","working_days":["Monday","Tuesday","Wednesday","Thursday","Friday"],"city":"North Strathfield","timelog_period":{"isEditLogRestricted":true,"log_future_time":{"allowed":false},"log_past_time":{"customize":{"unit":"day(s)","value":"1"}}},"task_duration_type":"hours","time_zone":"Australia\/NSW","startday_of_week":"monday","task_date_format":"dd\/MM\/yyyy hh:mm aaa","timesheet":{"default_billing_status":"Billable","is_timesheet_approval_enabled":true},"website_url":"www.qrsolutions.com.au","holidays":[{"date":"04-18-2014","name":"Good Friday","id":"685798000000060079"},{"date":"04-21-2014","name":"Easter Monday","id":"685798000000060081"},{"date":"04-25-2014","name":"Anzac Day","id":"685798000000060083"},{"date":"06-09-2014","name":"Queens Birthday","id":"685798000000060085"},{"date":"09-29-2014","name":"Family & Community Day","id":"685798000000060087"},{"date":"10-06-2014","name":"Labour Day","id":"685798000000060089"},{"date":"12-25-2014","name":"Christmas Day","id":"685798000000060091"},{"date":"12-26-2014","name":"Boxing Day","id":"685798000000060093"},{"date":"01-01-2015","name":"New Year Day","id":"685798000002672033"},{"date":"01-26-2015","name":"Australia Day","id":"685798000002672035"},{"date":"04-03-2015","name":"Good Friday","id":"685798000002672037"},{"date":"04-06-2015","name":"Easter Monday","id":"685798000002672039"},{"date":"06-08-2015","name":"Queens Birthday","id":"685798000002672041"},{"date":"08-03-2015","name":"Bank Holiday","id":"685798000002672043"},{"date":"10-05-2015","name":"Labour Day","id":"685798000002672045"},{"date":"12-25-2015","name":"Christmas Day","id":"685798000002672047"}],"is_budget_enabled":false,"company_name":"QR Solutions","date_format":"dd\/MM\/yyyy hh:mm aaa","state":"NSW","postal_code":"2137","has_budget_permission":true},"avail_client_user_count":0,"is_tags_available":true,"sprints_project_permission":false,"is_display_taskprefix":true,"bug_singular":"Bug","login_zpuid":685798000014575503,"is_display_projectprefix":true,"project_prefix":"PR-","max_user_count":-1,"max_client_user_count":-1,"extensions":{"locations":{"task_transition":"685798000012231001","taskdetails_rightpanel":"685798000009601091","app_settings":"685798000008013009","issuedetails_rightpanel":"685798000009601093","issue_tab":"685798000008013013","task_tab":"685798000008013011","attachment_picker":"685798000008880073","top_band":"685798000008776003","blueprint_during":"685798000012231003","project_tab":"685798000008776001"}},"profile_id":685798000005970143,"name":"qrsolutions","id_string":"36249008","is_time_log_restriction_enabled":false,"integrations":{"people":{"is_enabled":false},"meeting":{"is_enabled":false}}}]', true);
         try {
-            $api_base_url   = config('zoho.url.api_base');
+            $api_base_url = config('zoho.url.api_base');
             $portal_api_uri = $api_base_url . '/portals/';
             $response = Http::withToken($this->token)->get($portal_api_uri);
             if ($response->successful()) {
@@ -41,20 +43,16 @@ class ProjectController extends Controller
     public function sync()
     {
         $portals = $this->getPortals();
-        foreach ($portals as $portal)
-        {
+        foreach ($portals as $portal) {
             $projects = $this->getProjects($portal);
             $this->syncProjects($projects);
-            foreach ($projects as $project)
-            {
+            foreach ($projects as $project) {
                 $taskLists = $this->getTaskList($project);
                 $this->syncTaskList($taskLists, $project);
-                foreach ($taskLists as $taskList)
-                {
+                foreach ($taskLists as $taskList) {
                     $tasks = $this->getTask($taskList);
                     $this->syncTask($tasks, $project);
-                    foreach ($tasks as $task)
-                    {
+                    foreach ($tasks as $task) {
                         $sub_task = $this->getSubTasks($task);
                         $this->syncSubTask($sub_task, $project);
                     }
@@ -84,8 +82,7 @@ class ProjectController extends Controller
     {
         $project_columns = Schema::getColumnListing((new Project())->getTable());
 
-        foreach ($projects as $project)
-        {
+        foreach ($projects as $project) {
             try {
                 $project = Arr::only($project, $project_columns);
 
@@ -117,8 +114,7 @@ class ProjectController extends Controller
 
     private function prepareJsonColumns($array, $json_columns)
     {
-        foreach ($json_columns as $column)
-        {
+        foreach ($json_columns as $column) {
             if (isset($array[$column])) {
                 $array[$column] = json_encode($array[$column]);
             }
@@ -148,8 +144,7 @@ class ProjectController extends Controller
     {
         $taskLists_columns = Schema::getColumnListing((new Tasklist())->getTable());
         try {
-            foreach ($taskLists as $taskList)
-            {
+            foreach ($taskLists as $taskList) {
                 $taskList = Arr::only($taskList, $taskLists_columns);
                 $taskList['project_id'] = $project['id'];
 
@@ -162,8 +157,7 @@ class ProjectController extends Controller
                 }
 
                 $formatted_tasklist_data = $this->prepareJsonColumns($taskList, ['task_count', 'link']);
-                if ($taskList_model = Tasklist::find($formatted_tasklist_data['id']))
-                {
+                if ($taskList_model = Tasklist::find($formatted_tasklist_data['id'])) {
                     $taskList_model->update($formatted_tasklist_data);
                 } else {
                     Tasklist::create($formatted_tasklist_data);
@@ -193,8 +187,7 @@ class ProjectController extends Controller
     {
         $task_columns = Schema::getColumnListing((new Task())->getTable());
         try {
-            foreach ($tasks as $task)
-            {
+            foreach ($tasks as $task) {
                 $task = Arr::only($task, $task_columns);
                 $task['project_id'] = $project['id'];
 
@@ -209,8 +202,7 @@ class ProjectController extends Controller
                 $json_columns = ['details', 'link', 'custom_fields', 'log_hours', 'status'];
 
                 $formatted_task_data = $this->prepareJsonColumns($task, $json_columns);
-                if ($task_model = Task::find($formatted_task_data['id']))
-                {
+                if ($task_model = Task::find($formatted_task_data['id'])) {
                     $task_model->update($formatted_task_data);
                 } else {
                     Task::create($formatted_task_data);
@@ -240,8 +232,7 @@ class ProjectController extends Controller
     {
         $task_columns = Schema::getColumnListing((new SubTask())->getTable());
         try {
-            foreach ($tasks as $task)
-            {
+            foreach ($tasks as $task) {
                 $task = Arr::only($task, $task_columns);
                 $task['project_id'] = $project['id'];
 
@@ -265,8 +256,7 @@ class ProjectController extends Controller
                 ];
 
                 $formatted_task_data = $this->prepareJsonColumns($task, $json_columns);
-                if ($task_model = SubTask::find($formatted_task_data['id']))
-                {
+                if ($task_model = SubTask::find($formatted_task_data['id'])) {
                     $task_model->update($formatted_task_data);
                 } else {
                     SubTask::create($formatted_task_data);
@@ -274,6 +264,91 @@ class ProjectController extends Controller
             }
         } catch (\Exception $exception) {
             Log::error($exception);
+        }
+    }
+
+    public function syncTimeSheet(Request $request)
+    {
+
+        $portals = $this->getPortals();
+        foreach ($portals as $portal)
+        {
+            $projects = $this->getProjects($portal);
+
+            foreach ($projects as $project)
+            {
+                $timesheets = $this->getTimeSheets($project, $request);
+                foreach ($timesheets as $timesheet)
+                {
+                    try {
+                        $timesheet_data = $this->prepareTimeSheetData($project, $timesheet);
+                        if ($timesheet_model = TimeSheet::find($timesheet_data['id'])) {
+                            $timesheet_model->update($timesheet_data);
+                        } else {
+                            TimeSheet::create($timesheet_data);
+                        }
+                    } catch (\Exception $exception) {
+                        Log::error($exception);
+                        continue;
+                    }
+                }
+            }
+        }
+        return redirect()->back();
+    }
+
+    private function prepareTimeSheetData($project, $timesheet)
+    {
+        $json_fields = ['link', 'task', 'added_by', 'task_list'];
+
+        $timesheet['project_id'] = $project['id'];
+
+        if ($timesheet['task']['is_sub_task']) {
+            $timesheet['subtask_id']    = $timesheet['task']['id'];
+            $timesheet['subtask_name']  = $timesheet['task']['name'];
+            $timesheet['task_id']       = $timesheet['task']['root_task_id'];
+        } else {
+            $timesheet['task_id']       = $timesheet['task']['id'];
+            $timesheet['task_name']     = $timesheet['task']['name'];
+        }
+
+        if (isset($timesheet['created_date'])) {
+            $timesheet['created_date'] = Carbon::createFromFormat('m-d-Y', $timesheet['created_date']);
+        }
+
+        if (isset($timesheet['last_modified_date'])) {
+            $timesheet['last_modified_date'] = Carbon::createFromFormat('m-d-Y', $timesheet['last_modified_date']);
+        }
+
+        return $this->prepareJsonColumns($timesheet, $json_fields);
+    }
+
+    private function getTimeSheets($project, Request $request)
+    {
+        $custom_date = ['start_date' => $request->start_date, 'end_date' => $request->end_date];
+        $query_string = '?index=0&range=200&users_list=all&view_type=custom_date&date=' . $request->start_date;
+        $query_string .= '&bill_status=All&component_type=task&';
+        $query_string .= 'custom_date=' . urlencode(json_encode($custom_date));
+
+        $output = [];
+        try {
+            $time_sheet_api = $project['link']['timesheet']['url'] . $query_string;
+            $response = Http::withToken($this->token)->get($time_sheet_api);
+            if ($response->successful()) {
+                $time_logs = $response->json()['timelogs']['date'];
+                foreach ($time_logs as $time_log)
+                {
+                    foreach ($time_log['tasklogs'] as $tasklog)
+                    {
+                        $output[] = $tasklog;
+                    }
+                }
+                return $output;
+            }
+            return [];
+        } catch (\Exception $exception) {
+            Log::error($exception);
+            return [];
         }
     }
 }
