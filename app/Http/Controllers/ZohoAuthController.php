@@ -1,6 +1,9 @@
 <?php namespace App\Http\Controllers;
 
 use App\Http\Constants;
+use App\Models\Settings;
+use Carbon\Carbon;
+use Hamcrest\Core\Set;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -57,10 +60,21 @@ class ZohoAuthController extends Controller
 
     private function storeAuthInfoIntoCache($response)
     {
-        $expires_in = $response['expires_in'] - 10;
+        $expires_in = $response['expires_in'] - 60;
+        $expires_in_datetime = Carbon::now()->addSeconds($expires_in);
 
-        Cache::put(Constants::ZOHO_ACCESS_KEY_CACHE, $response['access_token'], $expires_in);
-        Cache::put(Constants::ZOHO_REFRESH_KEY_CACHE, $response['refresh_token'], $expires_in);
+        $settings = Settings::first();
+        if (!$settings) {
+            $settings = new Settings();
+        }
+
+        $settings->access_token   = $response['access_token'];
+        $settings->refresh_token  = $response['refresh_token'];
+        $settings->expires_in     = $expires_in_datetime;
+        $settings->save();
+
+        // Cache::put(Constants::ZOHO_ACCESS_KEY_CACHE, $response['access_token'], $expires_in);
+        // Cache::put(Constants::ZOHO_REFRESH_KEY_CACHE, $response['refresh_token'], $expires_in);
 
         // this api domain doesn't work, that's why base api is in config
         // Cache::put('zoho_auth_api_domain', $response['api_domain'], $expires_in);

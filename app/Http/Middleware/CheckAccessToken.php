@@ -1,6 +1,8 @@
 <?php namespace App\Http\Middleware;
 
 use App\Http\Constants;
+use App\Models\Settings;
+use Carbon\Carbon;
 use Closure;
 
 use Illuminate\Http\Request;
@@ -17,9 +19,15 @@ class CheckAccessToken
      */
     public function handle(Request $request, Closure $next)
     {
-        if (!Cache::has(Constants::ZOHO_ACCESS_KEY_CACHE)) {
+        $settings = Settings::first();
+        if (!$settings) {
             return redirect()->route('zoho-auth-init');
         }
+
+        if (!Carbon::create($settings->expires_in)->isFuture()) {
+            return redirect()->route('zoho-auth-init');
+        }
+
         return $next($request);
     }
 }

@@ -10,16 +10,16 @@
                 </div>
 
                 <div class="panel-body">
-                    @if (!Cache::has(\App\Http\Constants::ZOHO_ACCESS_KEY_CACHE))
+                    <a
+                        href="{{ route('sync-projects') }}"
+                        class="btn btn-primary"
+                    >Sync Projects, Tasklist & Task </a>
+
+                    @if (!Cache::has(\App\Http\Constants::ZOHO_ACCESS_KEY_CACHE) && 0)
                         <a
                             href="{{ route('zoho-auth-init') }}"
                             class="btn btn-primary"
                         >Authenticate With Zoho</a>
-                    @else
-                        <a
-                            href="{{ route('sync-projects') }}"
-                            class="btn btn-primary"
-                        >Sync Projects, Tasklist & Task </a>
                     @endif
                 </div>
             </div>
