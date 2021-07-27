@@ -3,25 +3,57 @@
 @section('content')
 
     <div class="container">
-        <div class="col-sm-offset-2 col-sm-8">
+        <div class="col-sm-offset-1 col-sm-10">
+            @if (session()->has('error'))
+                <div class="alert alert-danger" role="alert">
+                    {{ session()->get('error') }}
+                </div>
+            @endif
             <div class="panel panel-default">
                 <div class="panel-heading">
                     Home
                 </div>
 
                 <div class="panel-body">
-                    <div class="col-md-8-offset-2">
+                    <div class="col-md-10-offset-1">
                         <a
                             href="{{ route('sync-projects') }}"
                             class="btn btn-primary"
-                        >Sync Projects, Tasklist & Task </a>
+                        > Projects <span class="badge badge-light">{{ $count['projects'] }}</span>
+                        </a>
+
+                        <a
+                            href="{{ route('sync-users') }}"
+                            class="btn btn-primary"
+                        > Users <span class="badge badge-light">{{ $count['users'] }}</span>
+                        </a>
+
+                        <a href="{{ route('sync-tasklists') }}"
+                           class="btn btn-primary"
+                        > Tasklist <span class="badge badge-light">{{ $count['tasklists'] }}</span>
+                        </a>
+
+                        <a href="{{ route('sync-tasks') }}"
+                           class="btn btn-primary"
+                        > Task <span class="badge badge-light">{{ $count['tasks'] }}</span>
+                        </a>
+
+                        <a href="{{ route('sync-sub-tasks') }}"
+                           class="btn btn-primary"
+                        > Sub-Task <span class="badge badge-light">{{ $count['subtasks'] }}</span>
+                        </a>
+                        <a href="#"
+                           class="btn btn-primary"
+                        > Bug <span class="badge badge-light">0</span>
+                        </a>
 
                         <a class="btn btn-primary"
                            data-toggle="collapse"
                            data-target="#timesheet_form"
                            aria-expanded="false"
                            aria-controls="timesheet_form"
-                        >Sync TimeSheet</a>
+                        > Sync TimeSheet <span class="badge badge-light">{{ $count['timesheets'] }}</span>
+                        </a>
                     </div>
 
                     <div id="timesheet_form" class="collapse">

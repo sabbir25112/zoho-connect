@@ -6,6 +6,7 @@ use App\Models\SubTask;
 use App\Models\Task;
 use App\Models\Tasklist;
 use App\Models\TimeSheet;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -14,13 +15,23 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
-class ProjectController extends Controller
+class SyncController extends Controller
 {
     private $token;
 
     public function __construct()
     {
         $this->token = Settings::first()->access_token;
+    }
+
+    private function prepareJsonColumns($array, $json_columns)
+    {
+        foreach ($json_columns as $column) {
+            if (isset($array[$column])) {
+                $array[$column] = json_encode($array[$column]);
+            }
+        }
+        return $array;
     }
 
     private function getPortals()
@@ -40,27 +51,116 @@ class ProjectController extends Controller
         }
     }
 
-    public function sync()
+    public function syncProjects($is_internal = false)
     {
         $portals = $this->getPortals();
         foreach ($portals as $portal) {
             $projects = $this->getProjects($portal);
-            $this->syncProjects($projects);
-            foreach ($projects as $project) {
-                $taskLists = $this->getTaskList($project);
-                $this->syncTaskList($taskLists, $project);
-                foreach ($taskLists as $taskList) {
-                    $tasks = $this->getTask($taskList);
-                    $this->syncTask($tasks, $project);
-                    foreach ($tasks as $task) {
-                        $sub_task = $this->getSubTasks($task);
-                        $this->syncSubTask($sub_task, $project);
-                    }
+            $this->createOrUpdateProjects($projects);
+        }
+        if (!$is_internal)  return redirect()->back();
+    }
+
+    public function syncTaskLists($is_internal = false)
+    {
+        $projects = Project::all()->toArray();
+        if (empty($projects)) {
+            $this->syncProjects(1);
+            $projects = Project::all()->toArray();
+        }
+        foreach ($projects as $project) {
+            $taskLists = $this->getTaskList($project);
+            $this->createOrUpdateTaskList($taskLists, $project);
+        }
+        if (!$is_internal) return redirect()->back();
+    }
+
+    public function syncTasks($is_internal = false)
+    {
+        $taskLists = Tasklist::all()->toArray();
+        if (empty($taskLists)) {
+            $this->syncTaskLists(true);
+            $taskLists = Tasklist::all()->toArray();
+        }
+        foreach ($taskLists as $taskList) {
+            $tasks = $this->getTask($taskList);
+            $project = Project::find($taskList['project_id'])->toArray();
+            $this->createOrUpdateTask($tasks, $project);
+        }
+        if (!$is_internal) return redirect()->back();
+    }
+
+    public function syncSubTasks($is_internal = false)
+    {
+        $tasks = Task::all()->toArray();
+        if (empty($tasks)) {
+            $this->syncTasks(true);
+            $tasks = Task::all()->toArray();
+        }
+        foreach ($tasks as $task) {
+            $sub_task = $this->getSubTasks($task);
+            $project = Project::find($task['project_id'])->toArray();
+            $this->createOrUpdateSubTask($sub_task, $project);
+        }
+        if (!$is_internal) return redirect()->back();
+    }
+
+    public function syncUsers($is_internal = false)
+    {
+        // $response = '{"role_name":"Manager","profile_name":"manager","role":"manager","profile_type":"6","role_id":"170876000004915003","profile_id":"170876000004602140","name":"Patricia Boyle","active":true,"id":"923962","invoice":"60.000","email":"patricia.b@zylker.com","currency_code":"USD"}';
+        $projects = Project::all()->toArray();
+        if (empty($projects)) {
+            $this->syncProjects(1);
+            $projects = Project::all()->toArray();
+        }
+        foreach ($projects as $project) {
+            $users = $this->getProjectUsers($project);
+            $this->createOrUpdateProjectUser($users, $project);
+        }
+        if (!$is_internal) return redirect()->back();
+    }
+
+    private function getProjectUsers($project)
+    {
+        try {
+            $project['link'] = json_decode($project['link'], 1);
+            $project_user_api = $project['link']['user']['url'];
+            $response = Http::withToken($this->token)->get($project_user_api);
+            if ($response->successful()) {
+                return $response->json()['users'];
+            }
+            if ($response->failed())
+            {
+                session()->flash('error', $response->json()['error']['message']);
+            }
+            return [];
+        } catch (\Exception $exception) {
+            Log::error($exception);
+            return [];
+        }
+    }
+
+    private function createOrUpdateProjectUser($users, $project)
+    {
+        $user_columns = Schema::getColumnListing((new User())->getTable());
+
+        foreach ($users as $user)
+        {
+            $user = Arr::only($user, $user_columns);
+
+            try {
+                $user['project_id'] = $project['id'];
+                if ($user_model = User::find($user['id'])) {
+                    $user_model->update($user);
+                } else {
+                    User::create($user);
                 }
+            } catch (\Exception $exception) {
+                Log::error($exception);
             }
         }
-        return redirect()->back();
     }
+
 
     private function getProjects($portal)
     {
@@ -78,7 +178,7 @@ class ProjectController extends Controller
         }
     }
 
-    private function syncProjects($projects)
+    private function createOrUpdateProjects($projects)
     {
         $project_columns = Schema::getColumnListing((new Project())->getTable());
 
@@ -112,20 +212,11 @@ class ProjectController extends Controller
         }
     }
 
-    private function prepareJsonColumns($array, $json_columns)
-    {
-        foreach ($json_columns as $column) {
-            if (isset($array[$column])) {
-                $array[$column] = json_encode($array[$column]);
-            }
-        }
-        return $array;
-    }
-
     private function getTaskList($project)
     {
         // return json_decode('[{"created_time_long":1599126574243,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:34 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471075\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471075\/"}},"completed":false,"rolled":false,"task_count":{"open":26},"sequence":5,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"01-19-2021","last_updated_time_long":1611048991753,"name":"4th Milestone","id_string":"685798000011471075","id":685798000011471075,"last_updated_time_format":"01-19-2021 08:36:31 PM"},{"created_time_long":1599126567381,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:27 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471071\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471071\/"}},"completed":false,"rolled":false,"task_count":{"closed":6,"open":15},"sequence":4,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"12-03-2020","last_updated_time_long":1606991387255,"name":"3rd Milestone","id_string":"685798000011471071","id":685798000011471071,"last_updated_time_format":"12-03-2020 09:29:47 PM"},{"created_time_long":1599126558721,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:18 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471067\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471067\/"}},"completed":false,"rolled":false,"task_count":{"closed":7,"open":9},"sequence":3,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"11-12-2020","last_updated_time_long":1605170103808,"name":"2nd Milestone","id_string":"685798000011471067","id":685798000011471067,"last_updated_time_format":"11-12-2020 07:35:03 PM"},{"created_time_long":1599126550955,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:10 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471063\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471063\/"}},"completed":false,"rolled":false,"task_count":{"closed":2,"open":8},"sequence":2,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"10-28-2020","last_updated_time_long":1603859447852,"name":"1st Milestone","id_string":"685798000011471063","id":685798000011471063,"last_updated_time_format":"10-28-2020 03:30:47 PM"},{"created_time_long":1598587181833,"created_time":"08-28-2020","flag":"internal","created_time_format":"08-28-2020 01:59:41 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011410057\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011410057\/"}},"completed":false,"rolled":false,"task_count":{"closed":43,"open":11},"sequence":1,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"06-23-2021","last_updated_time_long":1624409301865,"name":"General","id_string":"685798000011410057","id":685798000011410057,"last_updated_time_format":"06-23-2021 10:48:21 AM"}]', true);
         try {
+            $project['link'] = json_decode($project['link'], 1);
             $taskList_api = $project['link']['tasklist']['url'];
             $response = Http::withToken($this->token)->get($taskList_api, [
                 'flag' => 'allflag',
@@ -140,7 +231,7 @@ class ProjectController extends Controller
         }
     }
 
-    private function syncTaskList($taskLists, $project)
+    private function createOrUpdateTaskList($taskLists, $project)
     {
         $taskLists_columns = Schema::getColumnListing((new Tasklist())->getTable());
         try {
@@ -171,6 +262,7 @@ class ProjectController extends Controller
     private function getTask($taskList)
     {
         try {
+            $taskList['link'] = json_decode($taskList['link'], 1);
             $task_api = $taskList['link']['task']['url'];
             $response = Http::withToken($this->token)->get($task_api);
             if ($response->successful()) {
@@ -183,7 +275,7 @@ class ProjectController extends Controller
         }
     }
 
-    private function syncTask($tasks, $project)
+    private function createOrUpdateTask($tasks, $project)
     {
         $task_columns = Schema::getColumnListing((new Task())->getTable());
         try {
@@ -216,6 +308,7 @@ class ProjectController extends Controller
     private function getSubTasks($task)
     {
         try {
+            $task['link'] = json_decode($task['link'], true);
             if (!isset($task['link']['subtask']['url'])) return [];
             $sub_task_api = $task['link']['subtask']['url'];
             $response = Http::withToken($this->token)->get($sub_task_api);
@@ -229,7 +322,7 @@ class ProjectController extends Controller
         }
     }
 
-    private function syncSubTask($tasks, $project)
+    private function createOrUpdateSubTask($tasks, $project)
     {
         $task_columns = Schema::getColumnListing((new SubTask())->getTable());
         try {

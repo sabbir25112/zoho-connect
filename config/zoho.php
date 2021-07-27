@@ -12,6 +12,8 @@ return [
             'ZohoProjects.tasklists.READ',
             'ZohoProjects.tasks.READ',
             'ZohoProjects.timesheets.READ',
+            'ZohoProjects.users.READ',
+            'ZohoProjects.bugs.READ',
         ],
     ],
 ];

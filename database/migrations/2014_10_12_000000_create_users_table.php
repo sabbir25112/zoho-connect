@@ -15,11 +15,18 @@ class CreateUsersTable extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
+            $table->string('profile_type')->nullable();
+            $table->string('role')->nullable();
+            $table->string('portal_role_name')->nullable();
+            $table->boolean('active')->nullable();
+            $table->string('zpuid')->nullable();
+            $table->string('profile_id')->nullable();
+            $table->string('project_profile_id')->nullable();
+            $table->string('portal_profile_name')->nullable();
+            $table->string('portal_role_id')->nullable();
+            $table->unsignedBigInteger('project_id')->nullable();
             $table->timestamps();
         });
     }

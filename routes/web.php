@@ -14,16 +14,18 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::group(['namespace' => 'App\Http\Controllers'], function () {
-    Route::get('/', function () {
-        return view('start');
-    })->name('welcome');
+    Route::get('/', 'Controller@start')->name('welcome');
 
     Route::get('/zoho-auth-init', 'ZohoAuthController@init')->name('zoho-auth-init');
     Route::get('/zoho-auth-callback', 'ZohoAuthController@callback');
 
     Route::group(['middleware' => 'check.access.token'], function () {
-        Route::get('sync-projects', 'ProjectController@sync')->name('sync-projects');
-        Route::post('sync-timesheets', 'ProjectController@syncTimeSheet')->name('sync-timesheet');
+        Route::get('sync-projects', 'SyncController@syncProjects')->name('sync-projects');
+        Route::get('sync-users', 'SyncController@syncUsers')->name('sync-users');
+        Route::get('sync-tasklists', 'SyncController@syncTaskLists')->name('sync-tasklists');
+        Route::get('sync-tasks', 'SyncController@syncTasks')->name('sync-tasks');
+        Route::get('sync-sub-tasks', 'SyncController@syncSubTasks')->name('sync-sub-tasks');
+        Route::post('sync-timesheets', 'SyncController@syncTimeSheet')->name('sync-timesheet');
     });
 });
 
