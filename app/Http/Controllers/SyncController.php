@@ -1,5 +1,6 @@
 <?php namespace App\Http\Controllers;
 
+use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Settings;
 use App\Models\SubTask;
@@ -8,7 +9,6 @@ use App\Models\Tasklist;
 use App\Models\TimeSheet;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
@@ -120,6 +120,21 @@ class SyncController extends Controller
         if (!$is_internal) return redirect()->back();
     }
 
+    public function syncBugs($is_internal = false)
+    {
+        $projects = Project::all()->toArray();
+
+        if (empty($projects)) {
+            $this->syncProjects(1);
+            $projects = Project::all()->toArray();
+        }
+        foreach ($projects as $project) {
+            $bugs = $this->getProjectBugs($project);
+            $this->createOrUpdateProjectBugs($bugs, $project);
+        }
+        if (!$is_internal) return redirect()->back();
+    }
+
     private function getProjectUsers($project)
     {
         try {
@@ -132,6 +147,22 @@ class SyncController extends Controller
             if ($response->failed())
             {
                 session()->flash('error', $response->json()['error']['message']);
+            }
+            return [];
+        } catch (\Exception $exception) {
+            Log::error($exception);
+            return [];
+        }
+    }
+
+    private function getProjectBugs($project)
+    {
+        try {
+            $project['link'] = json_decode($project['link'], 1);
+            $bug_api = $project['link']['bug']['url'];
+            $response = Http::withToken($this->token)->get($bug_api);
+            if ($response->successful()) {
+                return $response->json()['bugs'];
             }
             return [];
         } catch (\Exception $exception) {
@@ -154,6 +185,46 @@ class SyncController extends Controller
                     $user_model->update($user);
                 } else {
                     User::create($user);
+                }
+            } catch (\Exception $exception) {
+                Log::error($exception);
+            }
+        }
+    }
+
+    private function createOrUpdateProjectBugs($bugs, $project)
+    {
+
+        $bug_columns = Schema::getColumnListing((new Bug())->getTable());
+        $json_columns = [
+            'link',
+            'severity',
+            'reproducible',
+            'module',
+            'classification',
+            'GROUP_NAME',
+            'status',
+        ];
+        foreach ($bugs as $bug)
+        {
+            $bug = Arr::only($bug, $bug_columns);
+
+            try {
+                $bug['project_id'] = $project['id'];
+
+                if (isset($bug['updated_time'])) {
+                    $bug['updated_time'] = Carbon::createFromFormat('m-d-Y', $bug['updated_time']);
+                }
+
+                if (isset($bug['created_time'])) {
+                    $bug['created_time'] = Carbon::createFromFormat('m-d-Y', $bug['created_time']);
+                }
+
+                $bug = $this->prepareJsonColumns($bug, $json_columns);
+                if ($bug_model = Bug::find($bug['id'])) {
+                    $bug_model->update($bug);
+                } else {
+                    Bug::create($bug);
                 }
             } catch (\Exception $exception) {
                 Log::error($exception);

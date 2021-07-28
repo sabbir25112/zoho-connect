@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Bug;
 use App\Models\Project;
 use App\Models\SubTask;
 use App\Models\Task;
@@ -25,7 +26,8 @@ class Controller extends BaseController
             'tasklists' => Tasklist::count(),
             'tasks'     => Task::count(),
             'subtasks'  => SubTask::count(),
-            'timesheets'=> TimeSheet::count()
+            'timesheets'=> TimeSheet::count(),
+            'bugs'      => Bug::count()
         ];
 
         return view('start', compact('count'));

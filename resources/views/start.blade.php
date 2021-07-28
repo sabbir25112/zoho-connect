@@ -42,9 +42,9 @@
                            class="btn btn-primary"
                         > Sub-Task <span class="badge badge-light">{{ $count['subtasks'] }}</span>
                         </a>
-                        <a href="#"
+                        <a href="{{ route('sync-bugs') }}"
                            class="btn btn-primary"
-                        > Bug <span class="badge badge-light">0</span>
+                        > Bug <span class="badge badge-light">{{ $count['bugs'] }}</span>
                         </a>
 
                         <a class="btn btn-primary"

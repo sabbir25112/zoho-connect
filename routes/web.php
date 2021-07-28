@@ -25,6 +25,7 @@ Route::group(['namespace' => 'App\Http\Controllers'], function () {
         Route::get('sync-tasklists', 'SyncController@syncTaskLists')->name('sync-tasklists');
         Route::get('sync-tasks', 'SyncController@syncTasks')->name('sync-tasks');
         Route::get('sync-sub-tasks', 'SyncController@syncSubTasks')->name('sync-sub-tasks');
+        Route::get('sync-bugs', 'SyncController@syncBugs')->name('sync-bugs');
         Route::post('sync-timesheets', 'SyncController@syncTimeSheet')->name('sync-timesheet');
     });
 });
