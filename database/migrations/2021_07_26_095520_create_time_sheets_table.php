@@ -42,6 +42,7 @@ class CreateTimeSheetsTable extends Migration
             $table->string('task_name')->nullable();
             $table->unsignedBigInteger('subtask_id')->nullable();
             $table->string('subtask_name')->nullable();
+            $table->string('approver_name')->nullable();
             $table->timestamps();
         });
     }

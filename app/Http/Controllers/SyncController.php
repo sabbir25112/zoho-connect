@@ -453,6 +453,7 @@ class SyncController extends Controller
                             TimeSheet::create($timesheet_data);
                         }
                     } catch (\Exception $exception) {
+                        dd($exception);
                         Log::error($exception);
                         continue;
                     }
