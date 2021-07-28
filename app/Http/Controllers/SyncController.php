@@ -9,6 +9,7 @@ use App\Models\Tasklist;
 use App\Models\TimeSheet;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
@@ -434,7 +435,7 @@ class SyncController extends Controller
 
     public function syncTimeSheet(Request $request)
     {
-
+        $timesheet_columns = Schema::getColumnListing((new TimeSheet())->getTable());
         $portals = $this->getPortals();
         foreach ($portals as $portal)
         {
@@ -446,6 +447,7 @@ class SyncController extends Controller
                 foreach ($timesheets as $timesheet)
                 {
                     try {
+                        $timesheet = Arr::only($timesheet, $timesheet_columns);
                         $timesheet_data = $this->prepareTimeSheetData($project, $timesheet);
                         if ($timesheet_model = TimeSheet::find($timesheet_data['id'])) {
                             $timesheet_model->update($timesheet_data);
@@ -453,7 +455,6 @@ class SyncController extends Controller
                             TimeSheet::create($timesheet_data);
                         }
                     } catch (\Exception $exception) {
-                        dd($exception);
                         Log::error($exception);
                         continue;
                     }
