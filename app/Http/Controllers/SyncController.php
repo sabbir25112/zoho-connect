@@ -451,6 +451,7 @@ class SyncController extends Controller
 
     public function syncTimeSheet(Request $request)
     {
+        $component_types = ['task', 'bug', 'general'];
         $timesheet_columns = Schema::getColumnListing((new TimeSheet())->getTable());
         $portals = $this->getPortals();
         foreach ($portals as $portal)
@@ -459,20 +460,23 @@ class SyncController extends Controller
 
             foreach ($projects as $project)
             {
-                $timesheets = $this->getTimeSheets($project, $request);
-                foreach ($timesheets as $timesheet)
+                foreach ($component_types as $component_type)
                 {
-                    try {
-                        $timesheet = Arr::only($timesheet, $timesheet_columns);
-                        $timesheet_data = $this->prepareTimeSheetData($project, $timesheet);
-                        if ($timesheet_model = TimeSheet::find($timesheet_data['id'])) {
-                            $timesheet_model->update($timesheet_data);
-                        } else {
-                            TimeSheet::create($timesheet_data);
+                    $timesheets = $this->getTimeSheets($project, $request, $component_type);
+                    foreach ($timesheets as $timesheet)
+                    {
+                        try {
+                            $timesheet = Arr::only($timesheet, $timesheet_columns);
+                            $timesheet_data = $this->prepareTimeSheetData($project, $timesheet);
+                            if ($timesheet_model = TimeSheet::find($timesheet_data['id'])) {
+                                $timesheet_model->update($timesheet_data);
+                            } else {
+                                TimeSheet::create($timesheet_data);
+                            }
+                        } catch (\Exception $exception) {
+                            Log::error($exception);
+                            continue;
                         }
-                    } catch (\Exception $exception) {
-                        Log::error($exception);
-                        continue;
                     }
                 }
             }
@@ -486,13 +490,13 @@ class SyncController extends Controller
 
         $timesheet['project_id'] = $project['id'];
 
-        if ($timesheet['task']['is_sub_task']) {
-            $timesheet['subtask_id']    = $timesheet['task']['id'];
-            $timesheet['subtask_name']  = $timesheet['task']['name'];
-            $timesheet['task_id']       = $timesheet['task']['root_task_id'];
+        if (isset($timesheet['task']['is_sub_task']) && $timesheet['task']['is_sub_task']) {
+            $timesheet['subtask_id']    = $timesheet['task']['id'] ?? null;
+            $timesheet['subtask_name']  = $timesheet['task']['name'] ?? null;
+            $timesheet['task_id']       = $timesheet['task']['root_task_id'] ?? null;
         } else {
-            $timesheet['task_id']       = $timesheet['task']['id'];
-            $timesheet['task_name']     = $timesheet['task']['name'];
+            $timesheet['task_id']       = $timesheet['task']['id'] ?? null;
+            $timesheet['task_name']     = $timesheet['task']['name'] ?? null;
         }
 
         if (isset($timesheet['created_date'])) {
@@ -506,11 +510,11 @@ class SyncController extends Controller
         return $this->prepareJsonColumns($timesheet, $json_fields);
     }
 
-    private function getTimeSheets($project, Request $request)
+    private function getTimeSheets($project, Request $request, $component_type)
     {
         $custom_date = ['start_date' => $request->start_date, 'end_date' => $request->end_date];
         $query_string = '?index=0&range=200&users_list=all&view_type=custom_date&date=' . $request->start_date;
-        $query_string .= '&bill_status=All&component_type=task&';
+        $query_string .= "&bill_status=All&component_type=$component_type&";
         $query_string .= 'custom_date=' . urlencode(json_encode($custom_date));
 
         $output = [];
