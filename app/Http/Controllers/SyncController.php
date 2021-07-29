@@ -79,14 +79,13 @@ class SyncController extends Controller
 
     public function syncTasks($is_internal = false)
     {
-        $taskLists = Tasklist::all()->toArray();
-        if (empty($taskLists)) {
-            $this->syncTaskLists(true);
-            $taskLists = Tasklist::all()->toArray();
+        $projects = Project::all()->toArray();
+        if (empty($projects)) {
+            $this->syncProjects(1);
+            $projects = Project::all()->toArray();
         }
-        foreach ($taskLists as $taskList) {
-            $tasks = $this->getTask($taskList);
-            $project = Project::find($taskList['project_id'])->toArray();
+        foreach ($projects as $project) {
+            $tasks = $this->getTask($project);
             $this->createOrUpdateTask($tasks, $project);
         }
         if (!$is_internal) return redirect()->back();
@@ -332,11 +331,27 @@ class SyncController extends Controller
         }
     }
 
-    private function getTask($taskList)
+    private function getTaskOld($taskList)
     {
         try {
             $taskList['link'] = json_decode($taskList['link'], 1);
             $task_api = $taskList['link']['task']['url'];
+            $response = Http::withToken($this->token)->get($task_api);
+            if ($response->successful()) {
+                return $response->json()['tasks'];
+            }
+            return [];
+        } catch (\Exception $exception) {
+            Log::error($exception);
+            return [];
+        }
+    }
+
+    private function getTask($project)
+    {
+        try {
+            $project['link'] = json_decode($project['link'], 1);
+            $task_api = $project['link']['task']['url'];
             $response = Http::withToken($this->token)->get($task_api);
             if ($response->successful()) {
                 return $response->json()['tasks'];
