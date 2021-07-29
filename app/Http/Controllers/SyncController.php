@@ -486,7 +486,7 @@ class SyncController extends Controller
 
     private function prepareTimeSheetData($project, $timesheet)
     {
-        $json_fields = ['link', 'task', 'added_by', 'task_list'];
+        $json_fields = ['link', 'task', 'bug', 'added_by', 'task_list'];
 
         $timesheet['project_id'] = $project['id'];
 
@@ -528,11 +528,13 @@ class SyncController extends Controller
                 {
                     $log_date       = Carbon::createFromFormat('m-d-Y', $time_log['date']);
                     $log_date_long  = $time_log['date_long'];
-                    foreach ($time_log['tasklogs'] as $tasklog)
+                    $logs = $component_type == 'task' ? $time_log['tasklogs'] : $time_log['buglogs'];
+                    foreach ($logs as $log)
                     {
-                        $tasklog['log_date']        = $log_date;
-                        $tasklog['log_date_long']   = $log_date_long;
-                        $output[] = $tasklog;
+                        $log['log_date']        = $log_date;
+                        $log['log_date_long']   = $log_date_long;
+                        $log['type']            = $component_type;
+                        $output[]               = $log;
                     }
                 }
                 return $output;

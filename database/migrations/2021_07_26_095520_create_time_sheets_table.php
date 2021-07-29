@@ -15,6 +15,7 @@ class CreateTimeSheetsTable extends Migration
     {
         Schema::create('time_sheets', function (Blueprint $table) {
             $table->id();
+            $table->string('type')->nullable();
             $table->unsignedBigInteger('created_time_long')->nullable();
             $table->integer('hours')->nullable();
             $table->longText('notes')->nullable();
@@ -32,6 +33,7 @@ class CreateTimeSheetsTable extends Migration
             $table->longText('start_time')->nullable();
             $table->longText('last_modified_time_format')->nullable();
             $table->json('task')->nullable();
+            $table->json('bug')->nullable();
             $table->json('added_by')->nullable();
             $table->longText('id_string')->nullable();
             $table->date('created_date')->nullable();
