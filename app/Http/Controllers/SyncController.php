@@ -522,8 +522,12 @@ class SyncController extends Controller
                 $time_logs = $response_json['timelogs']['date'] ?? [];
                 foreach ($time_logs as $time_log)
                 {
+                    $log_date       = Carbon::createFromFormat('m-d-Y', $time_log['date']);
+                    $log_date_long  = $time_log['date_long'];
                     foreach ($time_log['tasklogs'] as $tasklog)
                     {
+                        $tasklog['log_date']        = $log_date;
+                        $tasklog['log_date_long']   = $log_date_long;
                         $output[] = $tasklog;
                     }
                 }
