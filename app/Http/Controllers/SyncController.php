@@ -451,7 +451,7 @@ class SyncController extends Controller
 
     public function syncTimeSheet(Request $request)
     {
-        $component_types = ['task', 'bug', 'general'];
+        $component_types = ['task', 'bug'];
         $timesheet_columns = Schema::getColumnListing((new TimeSheet())->getTable());
         $portals = $this->getPortals();
         foreach ($portals as $portal)
