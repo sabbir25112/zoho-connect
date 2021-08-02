@@ -14,12 +14,11 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::group(['namespace' => 'App\Http\Controllers', 'middleware' => 'auth'], function () {
-    Route::get('/', 'Controller@start')->name('welcome');
-
     Route::get('/zoho-auth-init', 'ZohoAuthController@init')->name('zoho-auth-init');
     Route::get('/zoho-auth-callback', 'ZohoAuthController@callback');
 
     Route::group(['middleware' => 'check.access.token'], function () {
+        Route::get('/', 'Controller@start')->name('welcome');
         Route::get('sync-projects', 'SyncController@syncProjects')->name('sync-projects');
         Route::get('sync-users', 'SyncController@syncUsers')->name('sync-users');
         Route::get('sync-tasklists', 'SyncController@syncTaskLists')->name('sync-tasklists');
