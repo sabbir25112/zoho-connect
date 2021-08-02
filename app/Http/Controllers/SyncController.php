@@ -5,13 +5,16 @@ use App\Models\Project;
 use App\Models\Settings;
 use App\Models\SubTask;
 use App\Models\Task;
+use App\Models\TaskBilling;
 use App\Models\Tasklist;
+use App\Models\TaskOwner;
 use App\Models\TimeSheet;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -385,11 +388,53 @@ class SyncController extends Controller
                 if ($task_model = Task::find($formatted_task_data['id'])) {
                     $task_model->update($formatted_task_data);
                 } else {
-                    Task::create($formatted_task_data);
+                    $task_model = Task::create($formatted_task_data);
+                }
+                $owners = json_decode($task_model->details, true);
+                $this->createOrUpdateTaskOwners($owners['owners'] ?? [], $task_model);
+
+                $bills = json_decode($task_model->log_hours, true);
+                $taskBilling = TaskBilling::where('TaskID', $task_model->id)->first();
+                if (!$taskBilling) {
+                    TaskBilling::create([
+                        'non_billable_hours' => $bills['non_billable_hours'] ?? '0',
+                        'billable_hours'     => $bills['billable_hours'] ?? '0',
+                        'TaskID'             => $task_model->id
+                    ]);
+                } else {
+                    $taskBilling->update([
+                        'non_billable_hours' => $bills['non_billable_hours'] ?? '0',
+                        'billable_hours'     => $bills['billable_hours'] ?? '0',
+                    ]);
                 }
             }
         } catch (\Exception $exception) {
             Log::error($exception);
+        }
+    }
+
+    private function createOrUpdateTaskOwners($owners, $task)
+    {
+        foreach ($owners as $owner)
+        {
+            try {
+                if (!isset($owner['id'])) continue;
+
+                $ownerData = [
+                    'TaskID'    => $task->id,
+                    'OwnerID'   => $owner['id'],
+                    'name'      => $owner['name'],
+                    'email'     => $owner['email'],
+                    'zpuid'     => $owner['zpuid'],
+                ];
+                if ($taskOwner = TaskOwner::find($owner['id'])) {
+                    $taskOwner->update($ownerData);
+                } else {
+                    TaskOwner::create($ownerData);
+                }
+            } catch (\Exception $exception) {
+                Log::error($exception);
+            }
         }
     }
 
