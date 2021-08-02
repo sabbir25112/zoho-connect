@@ -9,6 +9,11 @@
                     {{ session()->get('error') }}
                 </div>
             @endif
+            @if (session()->has('success'))
+                <div class="alert alert-success" role="alert">
+                    {{ session()->get('success') }}
+                </div>
+            @endif
             <div class="panel panel-default">
                 <div class="panel-heading">
                     Home

@@ -54,6 +54,8 @@
                 @if(!auth()->check() && 0)
                     <a href="{{ route('login') }}" class="btn btn-success" style="margin-top: 5px;">Login</a>
                 @elseif (auth()->check())
+                    <a href="{{ route('add-user') }}" class="btn btn-success" style="margin-top: 5px;">Add User</a>
+                    <a href="{{ route('change-password') }}" class="btn btn-primary" style="margin-top: 5px;">Change Password</a>
                     <a href="{{ route('logout') }}" class="btn btn-danger" style="margin-top: 5px;">Logout</a>
                 @endif
             </ul>

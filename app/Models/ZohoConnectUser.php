@@ -6,4 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class ZohoConnectUser extends Authenticable
 {
     use HasFactory;
+
+    protected $guarded = ['id'];
 }

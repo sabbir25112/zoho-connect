@@ -29,6 +29,10 @@ Route::group(['namespace' => 'App\Http\Controllers', 'middleware' => 'auth'], fu
         Route::post('sync-timesheets', 'SyncController@syncTimeSheet')->name('sync-timesheet');
     });
 
+    Route::get('add-user', 'ZohoConnectUserController@addUser')->name('add-user');
+    Route::post('store-user', 'ZohoConnectUserController@storeUser')->name('store-user');
+    Route::get('change-password', 'ZohoConnectUserController@changePassword')->name('change-password');
+    Route::post('store-password', 'ZohoConnectUserController@storePassword')->name('store-password');
     Route::get('logout', 'Auth\LoginController@logout');
 });
 
