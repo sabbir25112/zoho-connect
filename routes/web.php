@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::group(['namespace' => 'App\Http\Controllers'], function () {
+Route::group(['namespace' => 'App\Http\Controllers', 'middleware' => 'auth'], function () {
     Route::get('/', 'Controller@start')->name('welcome');
 
     Route::get('/zoho-auth-init', 'ZohoAuthController@init')->name('zoho-auth-init');
@@ -28,9 +28,8 @@ Route::group(['namespace' => 'App\Http\Controllers'], function () {
         Route::get('sync-bugs', 'SyncController@syncBugs')->name('sync-bugs');
         Route::post('sync-timesheets', 'SyncController@syncTimeSheet')->name('sync-timesheet');
     });
+
+    Route::get('logout', 'Auth\LoginController@logout');
 });
 
-
-//Route::get('/', function () {
-//    return view('welcome');
-//});
+Auth::routes(['register' => false]);

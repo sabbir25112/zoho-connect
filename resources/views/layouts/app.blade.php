@@ -51,7 +51,11 @@
 
             <!-- Right Side Of Navbar -->
             <ul class="nav navbar-nav navbar-right">
-
+                @if(!auth()->check() && 0)
+                    <a href="{{ route('login') }}" class="btn btn-success" style="margin-top: 5px;">Login</a>
+                @elseif (auth()->check())
+                    <a href="{{ route('logout') }}" class="btn btn-danger" style="margin-top: 5px;">Logout</a>
+                @endif
             </ul>
         </div>
     </div>
