@@ -6,8 +6,10 @@ use App\Models\Settings;
 use App\Models\SubTask;
 use App\Models\Task;
 use App\Models\TaskBilling;
+use App\Models\TaskCustom;
 use App\Models\Tasklist;
 use App\Models\TaskOwner;
+use App\Models\TaskStatus;
 use App\Models\TimeSheet;
 use App\Models\User;
 use Carbon\Carbon;
@@ -63,7 +65,10 @@ class SyncController extends Controller
             $projects = $this->getProjects($portal);
             $this->createOrUpdateProjects($projects);
         }
-        if (!$is_internal)  return redirect()->back();
+        if (!$is_internal)  {
+            session()->flash('success', 'Project Sync Complete');
+            return redirect()->back();
+        }
     }
 
     public function syncTaskLists($is_internal = false)
@@ -77,7 +82,10 @@ class SyncController extends Controller
             $taskLists = $this->getTaskList($project);
             $this->createOrUpdateTaskList($taskLists, $project);
         }
-        if (!$is_internal) return redirect()->back();
+        if (!$is_internal) {
+            session()->flash('success', 'TaskList Sync Complete');
+            return redirect()->back();
+        }
     }
 
     public function syncTasks($is_internal = false)
@@ -91,7 +99,10 @@ class SyncController extends Controller
             $tasks = $this->getTask($project);
             $this->createOrUpdateTask($tasks, $project);
         }
-        if (!$is_internal) return redirect()->back();
+        if (!$is_internal) {
+            session()->flash('success', 'Task Sync Complete');
+            return redirect()->back();
+        }
     }
 
     public function syncSubTasks($is_internal = false)
@@ -106,7 +117,10 @@ class SyncController extends Controller
             $project = Project::find($task['project_id'])->toArray();
             $this->createOrUpdateSubTask($sub_task, $project);
         }
-        if (!$is_internal) return redirect()->back();
+        if (!$is_internal) {
+            session()->flash('success', 'Sub-Task Sync Complete');
+            return redirect()->back();
+        }
     }
 
     public function syncUsers($is_internal = false)
@@ -121,7 +135,10 @@ class SyncController extends Controller
             $users = $this->getProjectUsers($project);
             $this->createOrUpdateProjectUser($users, $project);
         }
-        if (!$is_internal) return redirect()->back();
+        if (!$is_internal) {
+            session()->flash('success', 'User Sync Complete');
+            return redirect()->back();
+        }
     }
 
     public function syncBugs($is_internal = false)
@@ -136,7 +153,10 @@ class SyncController extends Controller
             $bugs = $this->getProjectBugs($project);
             $this->createOrUpdateProjectBugs($bugs, $project);
         }
-        if (!$is_internal) return redirect()->back();
+        if (!$is_internal) {
+            session()->flash('success', 'Bug Sync Complete');
+            return redirect()->back();
+        }
     }
 
     private function getProjectUsers($project)
@@ -391,7 +411,9 @@ class SyncController extends Controller
                     $task_model = Task::create($formatted_task_data);
                 }
                 $owners = json_decode($task_model->details, true);
+
                 $this->createOrUpdateTaskOwners($owners['owners'] ?? [], $task_model);
+                $this->createOrUpdateTaskStatuses($task['status'] ?? [], $task_model);
 
                 $bills = json_decode($task_model->log_hours, true);
                 $taskBilling = TaskBilling::where('TaskID', $task_model->id)->first();
@@ -431,6 +453,56 @@ class SyncController extends Controller
                     $taskOwner->update($ownerData);
                 } else {
                     TaskOwner::create($ownerData);
+                }
+            } catch (\Exception $exception) {
+                Log::error($exception);
+            }
+        }
+    }
+
+    private function createOrUpdateTaskStatuses($status, $task)
+    {
+        try {
+            if (!isset($status['id'])) return ;
+            $statusData = [
+                'status_id' => $status['id'],
+                'TaskID'    => $task->id,
+                'name'      => $status['name'],
+                'type'      => $status['type']
+            ];
+            $taskStatus = TaskStatus::where('status_id', $status['id'])
+                                ->where('TaskID', $task->id)
+                                ->first();
+            if ($taskStatus) {
+                $taskStatus->update($statusData);
+            } else {
+                TaskStatus::create($statusData);
+            }
+        } catch (\Exception $exception) {
+            Log::error($exception);
+        }
+    }
+
+    private function createOrUpdateTaskCustoms($customs, $task)
+    {
+        foreach ($customs as $custom)
+        {
+            try {
+                if (!isset($custom['label_name'])) continue;
+
+                $customData = [
+                    'TaskID'     => $task->id,
+                    'label_name' => $custom['label_name'],
+                    'label_value'=> $custom['label_value'],
+                ];
+
+                $taskCustom = TaskCustom::where('TaskID', $task->id)
+                                ->where('label_name', $custom['label_name'])
+                                ->first();
+                if ($taskCustom) {
+                    $taskCustom->update($customData);
+                } else {
+                    TaskCustom::create($customData);
                 }
             } catch (\Exception $exception) {
                 Log::error($exception);
@@ -486,8 +558,9 @@ class SyncController extends Controller
                 if ($task_model = SubTask::find($formatted_task_data['id'])) {
                     $task_model->update($formatted_task_data);
                 } else {
-                    SubTask::create($formatted_task_data);
+                    $task_model = SubTask::create($formatted_task_data);
                 }
+                $this->createOrUpdateTaskCustoms($formatted_task_data['custom_fields'] ?? [], $task_model);
             }
         } catch (\Exception $exception) {
             Log::error($exception);
@@ -526,6 +599,7 @@ class SyncController extends Controller
                 }
             }
         }
+        session()->flash('success', 'TimeSheet Sync Complete');
         return redirect()->back();
     }
 
