@@ -23,12 +23,49 @@ use Illuminate\Support\Facades\Schema;
 
 class SyncController extends Controller
 {
+    const GET_REQUEST = 'get';
+    const POST_REQUEST = 'post';
+
     private $token;
 
     public function __construct()
     {
         set_time_limit(0);
         $this->token = Settings::first()->access_token;
+    }
+
+    private function getResponse($api, $method, $response_key, $perams = [])
+    {
+        $output = [];
+        $has_page = true;
+        $index = 0;
+        do {
+            try {
+                $response = Http::withToken($this->token)->$method($api, $perams + [
+                        'index' => $index,
+                        'range' => 200
+                    ]);
+                if ($response->successful()) {
+                    if ($response->status() == 204) {
+                        Log::info(['api' => $api, 'index' => $index, 'message' => 'NO CONTENT']);
+                        break;
+                    } else {
+                        $output = array_merge($output, $response->json()[$response_key]);
+                        $index += 200;
+                    }
+                }
+                if ($response->failed()) {
+                    Log::error(['api' => $api, 'response' => json_encode($response->json()), 'message' => 'FAILED']);
+                    $has_page = false;
+                    continue;
+                }
+            } catch (\Exception $exception) {
+                Log::error($exception);
+                continue;
+            }
+        } while ($has_page);
+
+        return $output;
     }
 
     private function prepareJsonColumns($array, $json_columns)
@@ -88,7 +125,7 @@ class SyncController extends Controller
         }
     }
 
-    public function syncTasks($is_internal = false)
+    public function syncTasksOld($is_internal = false)
     {
         $projects = Project::all()->toArray();
         if (empty($projects)) {
@@ -101,6 +138,21 @@ class SyncController extends Controller
         }
         if (!$is_internal) {
             session()->flash('success', 'Task Sync Complete');
+            return redirect()->back();
+        }
+    }
+
+    public function syncTasks($is_internal = false)
+    {
+        $project = Project::find(request()->get('project'))->toArray();
+        if (!$project) {
+            session()->flash('error', "No Project Found, Please Select a Project");
+            return redirect()->back();
+        }
+        $tasks = $this->getTask($project);
+        $this->createOrUpdateTask($tasks, $project);
+        if (!$is_internal) {
+            session()->flash('success', 'Task Sync Complete for Project: '. $project['name']);
             return redirect()->back();
         }
     }
@@ -185,7 +237,7 @@ class SyncController extends Controller
             $project['link'] = json_decode($project['link'], 1);
             $bug_api = $project['link']['bug']['url'];
             $response = Http::withToken($this->token)->get($bug_api);
-            if ($response->successful()) {
+            if ($response->successful() && $response->status() != 204) {
                 return $response->json()['bugs'];
             }
             return [];
@@ -375,11 +427,7 @@ class SyncController extends Controller
         try {
             $project['link'] = json_decode($project['link'], 1);
             $task_api = $project['link']['task']['url'];
-            $response = Http::withToken($this->token)->get($task_api);
-            if ($response->successful()) {
-                return $response->json()['tasks'];
-            }
-            return [];
+            return $this->getResponse($task_api, self::GET_REQUEST, 'tasks');
         } catch (\Exception $exception) {
             Log::error($exception);
             return [];
@@ -405,7 +453,8 @@ class SyncController extends Controller
                 $json_columns = ['details', 'link', 'custom_fields', 'log_hours', 'status'];
 
                 $formatted_task_data = $this->prepareJsonColumns($task, $json_columns);
-                if ($task_model = Task::find($formatted_task_data['id'])) {
+                $task_model = Task::find($formatted_task_data['id']);
+                if ($task_model) {
                     $task_model->update($formatted_task_data);
                 } else {
                     $task_model = Task::create($formatted_task_data);
@@ -445,9 +494,9 @@ class SyncController extends Controller
                 $ownerData = [
                     'TaskID'    => $task->id,
                     'OwnerID'   => $owner['id'],
-                    'name'      => $owner['name'],
-                    'email'     => $owner['email'],
-                    'zpuid'     => $owner['zpuid'],
+                    'name'      => $owner['name'] ?? '',
+                    'email'     => $owner['email'] ?? '',
+                    'zpuid'     => $owner['zpuid'] ?? '',
                 ];
                 if ($taskOwner = TaskOwner::find($owner['id'])) {
                     $taskOwner->update($ownerData);
@@ -488,7 +537,7 @@ class SyncController extends Controller
         foreach ($customs as $custom)
         {
             try {
-                if (!isset($custom['label_name'])) continue;
+                if (!isset($custom['label_name']) || !isset($custom['label_value'])) continue;
 
                 $customData = [
                     'TaskID'     => $task->id,
@@ -530,9 +579,10 @@ class SyncController extends Controller
     private function createOrUpdateSubTask($tasks, $project)
     {
         $task_columns = Schema::getColumnListing((new SubTask())->getTable());
-        try {
-            foreach ($tasks as $task) {
+        foreach ($tasks as $task) {
+            try {
                 $task = Arr::only($task, $task_columns);
+                $task['percent_complete'] = (float) $task['percent_complete'];
                 $task['project_id'] = $project['id'];
 
                 if (isset($task['created_time'])) {
@@ -560,10 +610,10 @@ class SyncController extends Controller
                 } else {
                     $task_model = SubTask::create($formatted_task_data);
                 }
-                $this->createOrUpdateTaskCustoms($formatted_task_data['custom_fields'] ?? [], $task_model);
+                $this->createOrUpdateTaskCustoms($formatted_task_data['custom_fields'] ? json_decode($formatted_task_data['custom_fields'], true) : [], $task_model);
+            } catch (\Exception $exception) {
+                Log::error($exception);
             }
-        } catch (\Exception $exception) {
-            Log::error($exception);
         }
     }
 

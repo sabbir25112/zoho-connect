@@ -29,7 +29,8 @@ class Controller extends BaseController
             'timesheets'=> TimeSheet::count(),
             'bugs'      => Bug::count()
         ];
+        $projects = Project::pluck('name', 'id')->toArray();
 
-        return view('start', compact('count'));
+        return view('start', compact('count', 'projects'));
     }
 }

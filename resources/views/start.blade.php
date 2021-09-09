@@ -38,8 +38,11 @@
                         > Tasklist <span class="badge badge-light">{{ $count['tasklists'] }}</span>
                         </a>
 
-                        <a href="{{ route('sync-tasks') }}"
-                           class="btn btn-primary"
+                        <a class="btn btn-primary"
+                           data-toggle="collapse"
+                           data-target="#project_form"
+                           aria-expanded="false"
+                           aria-controls="project_form"
                         > Task <span class="badge badge-light">{{ $count['tasks'] }}</span>
                         </a>
 
@@ -60,7 +63,25 @@
                         > Sync TimeSheet <span class="badge badge-light">{{ $count['timesheets'] }}</span>
                         </a>
                     </div>
-
+                    <div id="project_form" class="collapse">
+                        <form action="{{ route('sync-tasks') }}">
+                            <div class="col-md-4" style="margin-top: 3%;">
+                                <div class="col">
+                                    <select class="form-control" aria-label="Default select example" name="project">
+                                        <option disabled selected>Select Project to Sync Task</option>
+                                        @foreach($projects as $id => $name)
+                                            <option value="{{ $id }}">{{ $name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4" style="margin-top: 3%;">
+                                <div class="col">
+                                    <button type="submit" class="btn btn-success">Submit</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
                     <div id="timesheet_form" class="collapse">
                         @php
                             $start_date = Carbon\Carbon::today()->subDays(40)->format('m-d-Y');
