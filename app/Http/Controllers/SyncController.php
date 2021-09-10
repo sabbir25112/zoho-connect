@@ -151,6 +151,8 @@ class SyncController extends Controller
         }
         $tasks = $this->getTask($project);
         $this->createOrUpdateTask($tasks, $project);
+        $bugs = $this->getProjectBugs($project);
+        $this->createOrUpdateProjectBugs($bugs, $project);
         if (!$is_internal) {
             session()->flash('success', 'Task Sync Complete for Project: '. $project['name']);
             return redirect()->back();
@@ -236,11 +238,7 @@ class SyncController extends Controller
         try {
             $project['link'] = json_decode($project['link'], 1);
             $bug_api = $project['link']['bug']['url'];
-            $response = Http::withToken($this->token)->get($bug_api);
-            if ($response->successful() && $response->status() != 204) {
-                return $response->json()['bugs'];
-            }
-            return [];
+            return $this->getResponse($bug_api, self::GET_REQUEST, 'bugs');
         } catch (\Exception $exception) {
             Log::error($exception);
             return [];
