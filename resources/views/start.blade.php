@@ -46,8 +46,11 @@
                         > Task <span class="badge badge-light">{{ $count['tasks'] }}</span>
                         </a>
 
-                        <a href="{{ route('sync-sub-tasks') }}"
-                           class="btn btn-primary"
+                        <a class="btn btn-primary"
+                           data-toggle="collapse"
+                           data-target="#project_form"
+                           aria-expanded="false"
+                           aria-controls="project_form"
                         > Sub-Task <span class="badge badge-light">{{ $count['subtasks'] }}</span>
                         </a>
                         <a class="btn btn-primary"

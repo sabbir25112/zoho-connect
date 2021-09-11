@@ -13,10 +13,8 @@ use App\Models\TaskStatus;
 use App\Models\TimeSheet;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -25,6 +23,7 @@ class SyncController extends Controller
 {
     const GET_REQUEST = 'get';
     const POST_REQUEST = 'post';
+    const MAX_REQUEST_PER_MIN = 50;
 
     private $token;
 
@@ -33,6 +32,25 @@ class SyncController extends Controller
         set_time_limit(0);
         $this->token = Settings::first()->access_token;
     }
+
+    // incomplete
+
+//    private function getAccessToken()
+//    {
+//
+//    }
+
+//    private function getHttpResponse($api, $method, $response_key, $perams = [])
+//    {
+//        $response = Http::withToken($this->token)->$method($api, $perams);
+//        $json_response = $response->json();
+//        if ($response->failed()) {
+//            if ($response->status() == 401 && (isset($json_response['error']) && $json_response['error']['code'] == 6401)) {
+//                $this->getAccessToken();
+//                $response = Http::withToken($this->token)->$method($api, $perams);
+//            }
+//        }
+//    }
 
     private function getResponse($api, $method, $response_key, $perams = [])
     {
@@ -153,8 +171,9 @@ class SyncController extends Controller
         $this->createOrUpdateTask($tasks, $project);
         $bugs = $this->getProjectBugs($project);
         $this->createOrUpdateProjectBugs($bugs, $project);
+        $this->syncSubTasksByProject($project);
         if (!$is_internal) {
-            session()->flash('success', 'Task Sync Complete for Project: '. $project['name']);
+            session()->flash('success', 'Task, SubTask and Bug Sync Complete for Project: '. $project['name']);
             return redirect()->back();
         }
     }
@@ -174,6 +193,21 @@ class SyncController extends Controller
         if (!$is_internal) {
             session()->flash('success', 'Sub-Task Sync Complete');
             return redirect()->back();
+        }
+    }
+
+    private function syncSubTasksByProject($project)
+    {
+        $tasks = Task::where(['project_id' => $project['id'], 'subtasks' => 1])->get()->toArray();
+        $chunked_tasks = array_chunk($tasks, self::MAX_REQUEST_PER_MIN);
+        foreach ($chunked_tasks as $chunked_task)
+        {
+            foreach ($chunked_task as $task)
+            {
+                $sub_task = $this->getSubTasks($task);
+                $this->createOrUpdateSubTask($sub_task, $project);
+            }
+            sleep(30);
         }
     }
 
