@@ -6,6 +6,7 @@ return [
     ],
     'authentication' => [
         'url' => 'https://accounts.zoho.com/oauth/v2/auth',
+        'refresh_token' => 'https://accounts.zoho.com/oauth/v2/token',
         'auth_scopes' => [
             'ZohoProjects.portals.READ',
             'ZohoProjects.projects.READ',

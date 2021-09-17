@@ -36,3 +36,9 @@ Route::group(['namespace' => 'App\Http\Controllers', 'middleware' => 'auth'], fu
 });
 
 Auth::routes(['register' => false]);
+
+Route::get('test-queue', function () {
+    $project = \App\Models\Project::find(685798000013322790)->toArray();
+    $userSyncer = new \App\Zoho\UserSyncer($project);
+    dd($userSyncer->call());
+});

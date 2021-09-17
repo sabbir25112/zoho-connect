@@ -1,5 +1,6 @@
 <?php namespace App\Http\Controllers;
 
+use App\Jobs\SyncUserJob;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Settings;
@@ -211,22 +212,11 @@ class SyncController extends Controller
         }
     }
 
-    public function syncUsers($is_internal = false)
+    public function syncUsers()
     {
-        // $response = '{"role_name":"Manager","profile_name":"manager","role":"manager","profile_type":"6","role_id":"170876000004915003","profile_id":"170876000004602140","name":"Patricia Boyle","active":true,"id":"923962","invoice":"60.000","email":"patricia.b@zylker.com","currency_code":"USD"}';
-        $projects = Project::all()->toArray();
-        if (empty($projects)) {
-            $this->syncProjects(1);
-            $projects = Project::all()->toArray();
-        }
-        foreach ($projects as $project) {
-            $users = $this->getProjectUsers($project);
-            $this->createOrUpdateProjectUser($users, $project);
-        }
-        if (!$is_internal) {
-            session()->flash('success', 'User Sync Complete');
-            return redirect()->back();
-        }
+        SyncUserJob::dispatch();
+        session()->flash('success', 'User Sync Job running in background. Please check after some time');
+        return redirect()->back();
     }
 
     public function syncBugs($is_internal = false)
