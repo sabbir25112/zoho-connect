@@ -39,6 +39,10 @@ Auth::routes(['register' => false]);
 
 Route::get('test-queue', function () {
     $project = \App\Models\Project::find(685798000013322790)->toArray();
-    $userSyncer = new \App\Zoho\TaskSyncer($project);
-    dd($userSyncer->call());
+    $tasks = \App\Models\Task::where(['project_id' => $project['id'], 'subtasks' => 1])->get()->toArray();
+    foreach ($tasks as $task) {
+        $subTaskSyncer = new \App\Zoho\SubTaskSyncer($task, $project);
+        $subTaskSyncer->call();
+    }
+    dd("OKK");
 });

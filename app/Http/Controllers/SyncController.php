@@ -1,5 +1,6 @@
 <?php namespace App\Http\Controllers;
 
+use App\Jobs\SyncSubTaskJob;
 use App\Jobs\SyncTaskJob;
 use App\Jobs\SyncUserJob;
 use App\Models\Bug;
@@ -161,22 +162,25 @@ class SyncController extends Controller
         }
     }
 
-    public function syncSubTasks($is_internal = false)
+    public function syncSubTasks()
     {
-        $tasks = Task::all()->toArray();
-        if (empty($tasks)) {
-            $this->syncTasks(true);
-            $tasks = Task::all()->toArray();
-        }
-        foreach ($tasks as $task) {
-            $sub_task = $this->getSubTasks($task);
-            $project = Project::find($task['project_id'])->toArray();
-            $this->createOrUpdateSubTask($sub_task, $project);
-        }
-        if (!$is_internal) {
-            session()->flash('success', 'Sub-Task Sync Complete');
-            return redirect()->back();
-        }
+        SyncSubTaskJob::dispatch();
+        session()->flash('success', 'Sub Task Sync Job running in background. Please check after some time');
+        return redirect()->back();
+    }
+
+    public function syncUsers()
+    {
+        SyncUserJob::dispatch();
+        session()->flash('success', 'User Sync Job running in background. Please check after some time');
+        return redirect()->back();
+    }
+
+    public function syncTasks()
+    {
+        SyncTaskJob::dispatch();
+        session()->flash('success', 'Task Sync Job running in background. Please check after some time');
+        return redirect()->back();
     }
 
     private function syncSubTasksByProject($project)
@@ -192,20 +196,6 @@ class SyncController extends Controller
             }
             sleep(30);
         }
-    }
-
-    public function syncUsers()
-    {
-        SyncUserJob::dispatch();
-        session()->flash('success', 'User Sync Job running in background. Please check after some time');
-        return redirect()->back();
-    }
-
-    public function syncTasks()
-    {
-        SyncTaskJob::dispatch();
-        session()->flash('success', 'Task Sync Job running in background. Please check after some time');
-        return redirect()->back();
     }
 
     public function syncBugs($is_internal = false)

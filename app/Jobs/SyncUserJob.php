@@ -14,9 +14,7 @@ use Illuminate\Queue\SerializesModels;
 
 class SyncUserJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    public $timeout = 1800;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, CommonJobConfig;
 
     /**
      * Create a new job instance.

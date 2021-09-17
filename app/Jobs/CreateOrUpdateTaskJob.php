@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
 
 class CreateOrUpdateTaskJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, CommonJobConfig;
 
     protected $project;
     protected $tasks;

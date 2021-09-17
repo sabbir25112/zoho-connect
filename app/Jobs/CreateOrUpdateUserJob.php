@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
 
 class CreateOrUpdateUserJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, CommonJobConfig;
 
     protected $project;
     protected $users;
