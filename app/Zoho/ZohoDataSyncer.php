@@ -16,9 +16,7 @@ abstract class ZohoDataSyncer
         $method,
         $params = [],
         $token,
-        $refresh_token,
-        $max_request_per_min = 50,
-        $sleep_after_max_request = 30;
+        $refresh_token;
 
     abstract function parseResponse($response);
 
@@ -39,6 +37,9 @@ abstract class ZohoDataSyncer
 
     private function getResponse(): array
     {
+        $max_request_per_min = config('zoho.queue.max_request_per_min');
+        $sleep_after_max_request = config('zoho.queue.sleep_after_max_request');
+
         $output = [];
         $has_page = true;
         $index = 0;
@@ -47,9 +48,9 @@ abstract class ZohoDataSyncer
 
         do {
             try {
-                if ($call_count >= $this->max_request_per_min) {
-                    Logger::verbose("Sleeping for ". $this->sleep_after_max_request . " sec after ". $this->max_request_per_min . " calls");
-                    sleep($this->sleep_after_max_request);
+                if ($call_count >= $max_request_per_min) {
+                    Logger::verbose("Sleeping for ". $sleep_after_max_request . " sec after ". $max_request_per_min . " calls");
+                    sleep($sleep_after_max_request);
                     continue;
                 }
 
@@ -84,7 +85,7 @@ abstract class ZohoDataSyncer
                 if ($response->status() == 401 && str_contains($json_response['error']['message'], "Invalid OAuth access token")) {
                     Logger::verbose("API token expired. Creating new API Token");
 
-                    $token = TokenSyncer::getAccessToken($this->refresh_token);
+                    $token = $this->getAccessToken($this->refresh_token);
                     if ($token == '') {
                         Logger::error('Could not generate API token');
                         break;
@@ -114,5 +115,27 @@ abstract class ZohoDataSyncer
         } while ($has_page);
 
         return $output;
+    }
+
+    public function getAccessToken($refresh_token)
+    {
+        $API = config('zoho.authentication.refresh_token');
+        $client_id = env('ZOHO_CLIENT_ID');
+        $client_secret = env('ZOHO_CLIENT_SECRET');
+        $redirect_uri = env('ZOHO_REDIRECT_URI');
+
+        $response = Http::asForm()->post($API, [
+            'refresh_token' => $refresh_token,
+            'client_id'     => $client_id,
+            'client_secret' => $client_secret,
+            'grant_type'    => 'refresh_token',
+            'redirect_uri'  => $redirect_uri
+        ]);
+
+        $json_response = $response->json();
+        if ($response->successful()) {
+            return $json_response['access_token'] ?? '';
+        }
+        return '';
     }
 }

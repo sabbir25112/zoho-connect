@@ -38,11 +38,8 @@
                         > Tasklist <span class="badge badge-light">{{ $count['tasklists'] }}</span>
                         </a>
 
-                        <a class="btn btn-primary"
-                           data-toggle="collapse"
-                           data-target="#project_form"
-                           aria-expanded="false"
-                           aria-controls="project_form"
+                        <a href="{{ route('sync-tasks') }}"
+                            class="btn btn-primary"
                         > Task <span class="badge badge-light">{{ $count['tasks'] }}</span>
                         </a>
 

@@ -11,11 +11,12 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 
 class SyncUserJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public $timeout = 1800;
 
     /**
      * Create a new job instance.
@@ -42,7 +43,9 @@ class SyncUserJob implements ShouldQueue
             Logger::verbose("Start Processing UserSyncer for ". $project['id']);
             (new UserSyncer($project))->call();
             Logger::verbose("End Processing UserSyncer for ". $project['id']);
-            sleep(5);
+            sleep(config('zoho.queue.sleep_after_processing_a_project'));
         }
+
+        Logger::verbose("End SyncUserJob");
     }
 }

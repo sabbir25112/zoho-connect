@@ -39,6 +39,6 @@ Auth::routes(['register' => false]);
 
 Route::get('test-queue', function () {
     $project = \App\Models\Project::find(685798000013322790)->toArray();
-    $userSyncer = new \App\Zoho\UserSyncer($project);
+    $userSyncer = new \App\Zoho\TaskSyncer($project);
     dd($userSyncer->call());
 });

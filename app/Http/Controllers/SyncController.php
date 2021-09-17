@@ -1,5 +1,6 @@
 <?php namespace App\Http\Controllers;
 
+use App\Jobs\SyncTaskJob;
 use App\Jobs\SyncUserJob;
 use App\Models\Bug;
 use App\Models\Project;
@@ -33,25 +34,6 @@ class SyncController extends Controller
         set_time_limit(0);
         $this->token = Settings::first()->access_token;
     }
-
-    // incomplete
-
-//    private function getAccessToken()
-//    {
-//
-//    }
-
-//    private function getHttpResponse($api, $method, $response_key, $perams = [])
-//    {
-//        $response = Http::withToken($this->token)->$method($api, $perams);
-//        $json_response = $response->json();
-//        if ($response->failed()) {
-//            if ($response->status() == 401 && (isset($json_response['error']) && $json_response['error']['code'] == 6401)) {
-//                $this->getAccessToken();
-//                $response = Http::withToken($this->token)->$method($api, $perams);
-//            }
-//        }
-//    }
 
     private function getResponse($api, $method, $response_key, $perams = [])
     {
@@ -161,7 +143,7 @@ class SyncController extends Controller
         }
     }
 
-    public function syncTasks($is_internal = false)
+    public function syncTasksOld2($is_internal = false)
     {
         $project = Project::find(request()->get('project'))->toArray();
         if (!$project) {
@@ -216,6 +198,13 @@ class SyncController extends Controller
     {
         SyncUserJob::dispatch();
         session()->flash('success', 'User Sync Job running in background. Please check after some time');
+        return redirect()->back();
+    }
+
+    public function syncTasks()
+    {
+        SyncTaskJob::dispatch();
+        session()->flash('success', 'Task Sync Job running in background. Please check after some time');
         return redirect()->back();
     }
 

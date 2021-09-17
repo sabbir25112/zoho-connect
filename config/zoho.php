@@ -17,4 +17,9 @@ return [
             'ZohoProjects.bugs.READ',
         ],
     ],
+    'queue' => [
+        'sleep_after_processing_a_project'  => 5,
+        'max_request_per_min'               => 50,
+        'sleep_after_max_request'           => 30,
+    ]
 ];
