@@ -9,27 +9,32 @@ class Logger
 {
     public static function verbose($message)
     {
-        if(! empty(config('app.verbose'))) echo ' ' . $message .  ' <br />' . PHP_EOL;
+        self::showMessageWithTime($message);
     }
 
     public static function error($message)
     {
         Log::error($message);
-
-        if(! empty(config('app.verbose'))) echo ' ' . $message . ' <br />' . PHP_EOL;
+        self::showMessageWithTime($message);
     }
 
     public static function info($message)
     {
         Log::info($message);
-
-        if(! empty(config('app.verbose'))) echo ' ' . $message .  ' <br />' . PHP_EOL;
+        self::showMessageWithTime($message);
     }
 
     public static function warning($message)
     {
         Log::warning($message);
+        self::showMessageWithTime($message);
+    }
 
-        if(! empty(config('app.verbose'))) echo ' ' . $message .  ' <br />' . PHP_EOL;
+    private static function showMessageWithTime($message)
+    {
+        if(! empty(config('app.verbose'))) {
+            $time = Carbon::now()->toDateTimeString();
+            echo "\e[0;32;40m$time\e[0m $message\n";
+        }
     }
 }

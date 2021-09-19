@@ -19,7 +19,8 @@ return [
     ],
     'queue' => [
         'sleep_after_processing_a_project'  => 5,
-        'max_request_per_min'               => 50,
+        'max_request_per_min'               => 25,
         'sleep_after_max_request'           => 30,
+        'range'                             => 200,
     ]
 ];

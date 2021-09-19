@@ -1,5 +1,6 @@
 <?php namespace App\Http\Controllers;
 
+use App\Jobs\SyncBugsJob;
 use App\Jobs\SyncSubTaskJob;
 use App\Jobs\SyncTaskJob;
 use App\Jobs\SyncUserJob;
@@ -183,6 +184,13 @@ class SyncController extends Controller
         return redirect()->back();
     }
 
+    public function syncBugs($is_internal = false)
+    {
+        SyncBugsJob::dispatch();
+        session()->flash('success', 'Task Sync Job running in background. Please check after some time');
+        return redirect()->back();
+    }
+
     private function syncSubTasksByProject($project)
     {
         $tasks = Task::where(['project_id' => $project['id'], 'subtasks' => 1])->get()->toArray();
@@ -195,24 +203,6 @@ class SyncController extends Controller
                 $this->createOrUpdateSubTask($sub_task, $project);
             }
             sleep(30);
-        }
-    }
-
-    public function syncBugs($is_internal = false)
-    {
-        $projects = Project::all()->toArray();
-
-        if (empty($projects)) {
-            $this->syncProjects(1);
-            $projects = Project::all()->toArray();
-        }
-        foreach ($projects as $project) {
-            $bugs = $this->getProjectBugs($project);
-            $this->createOrUpdateProjectBugs($bugs, $project);
-        }
-        if (!$is_internal) {
-            session()->flash('success', 'Bug Sync Complete');
-            return redirect()->back();
         }
     }
 

@@ -37,21 +37,30 @@ class SyncSubTaskJob implements ShouldQueue
         Logger::verbose("Starting SyncSubTaskJob");
 
         $projects = Project::all()->toArray();
+        $request_count = 0;
+        $max_request_per_min = config('zoho.queue.max_request_per_min');
+        $sleep_after_max_request = config('zoho.queue.sleep_after_max_request');
         foreach ($projects as $project)
         {
             Logger::verbose("Start Processing TaskSyncer for ". $project['id']);
 
             $tasks = Task::where(['project_id' => $project['id'], 'subtasks' => 1])->get()->toArray();
-            $chunked_tasks = array_chunk($tasks, config('zoho.queue.max_request_per_min'));
+            $chunked_tasks = array_chunk($tasks, $max_request_per_min);
 
             foreach ($chunked_tasks as $chunked_task)
             {
                 foreach ($chunked_task as $task)
                 {
-                    (new SubTaskSyncer($task, $project))->call();
+                    $process_response = (new SubTaskSyncer($task, $project))->call(true);
+                    Logger::verbose("Request Count: " . $request_count . " . It made ". $process_response['call_count'] . " call(s) for ". $task['id']);
+                    $request_count += $process_response['call_count'];
+
+                    if ($request_count > $max_request_per_min) {
+                        $request_count = 0;
+                        Logger::verbose("Sleep for " . $sleep_after_max_request . " Seconds after Max Request");
+                        sleep($sleep_after_max_request);
+                    }
                 }
-                Logger::verbose("Sleep for " . config('zoho.queue.sleep_after_max_request') . " Seconds after Max Request");
-                sleep(config('zoho.queue.sleep_after_max_request'));
             }
             Logger::verbose("End Processing TaskSyncer for ". $project['id']);
             Logger::verbose("Sleep for " . config('zoho.queue.sleep_after_processing_a_project') . " Seconds");

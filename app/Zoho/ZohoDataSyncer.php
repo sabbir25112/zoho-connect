@@ -16,7 +16,9 @@ abstract class ZohoDataSyncer
         $method,
         $params = [],
         $token,
-        $refresh_token;
+        $refresh_token,
+        $with_call_count,
+        $with_output;
 
     abstract function parseResponse($response);
 
@@ -24,11 +26,13 @@ abstract class ZohoDataSyncer
 
     abstract function isCallable(): bool;
 
-    public function call()
+    public function call($with_call_count = false, $with_output = false)
     {
         $settings = Settings::first();
         $this->token = $settings->access_token;
         $this->refresh_token = $settings->refresh_token;
+        $this->with_call_count = $with_call_count;
+        $this->with_output = $with_output;
 
         if ($this->isCallable()) return $this->getResponse();
 
@@ -39,16 +43,20 @@ abstract class ZohoDataSyncer
     {
         $max_request_per_min = config('zoho.queue.max_request_per_min');
         $sleep_after_max_request = config('zoho.queue.sleep_after_max_request');
+        $range = config('zoho.queue.range');
 
-        $output = [];
+        $response_collection = [];
         $has_page = true;
         $index = 0;
         $method = $this->method;
         $call_count = 0;
+        $output_call_count = 0;
 
         do {
             try {
                 if ($call_count >= $max_request_per_min) {
+                    $call_count = 0;
+
                     Logger::verbose("Sleeping for ". $sleep_after_max_request . " sec after ". $max_request_per_min . " calls");
                     sleep($sleep_after_max_request);
                     continue;
@@ -56,9 +64,10 @@ abstract class ZohoDataSyncer
 
                 $response = Http::withToken($this->token)->$method($this->API, $this->params + [
                         'index' => $index,
-                        'range' => 200
+                        'range' => $range,
                     ]);
                 $call_count += 1;
+                $output_call_count += 1;
 
                 $json_response = $response->json();
 
@@ -73,9 +82,16 @@ abstract class ZohoDataSyncer
                         if (count($parsed_response)) {
                             Logger::verbose("Response processing for ". $this->API. " on index: $index");
                             $this->processResponse($parsed_response);
-                            $output = array_merge($output, $parsed_response);
-                            $index += 200;
-                            continue;
+
+                            if ($this->with_output) $response_collection = array_merge($response_collection, $parsed_response);
+
+                            if (count($parsed_response) < $range) {
+                                Logger::verbose("Skipping Next Call (Predicted No Content) for ". $this->API. " on index: $index");
+                                break;
+                            } else {
+                                $index += 200;
+                                continue;
+                            }
                         } else {
                             Logger::verbose("Skipping Response (empty) for ". $this->API. " on index: $index");
                             continue;
@@ -114,7 +130,11 @@ abstract class ZohoDataSyncer
             }
         } while ($has_page);
 
-        return $output;
+        $process_output = [];
+        if ($this->with_output) $process_output['response_collection'] = $response_collection;
+        if ($this->with_call_count) $process_output['call_count'] = $output_call_count;
+
+        return $process_output;
     }
 
     public function getAccessToken($refresh_token)
