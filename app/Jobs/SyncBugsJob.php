@@ -44,8 +44,7 @@ class SyncBugsJob implements ShouldQueue
                 Logger::verbose("End Processing BugSyncer for ". $project['id']);
                 sleep(config('zoho.queue.sleep_after_processing_a_project'));
             } catch (\Exception $exception) {
-                Logger::error("Unhandled error for ProjectID ". $project['id']);
-                Logger::error();
+                Logger::error("Unhandled error for ProjectID ". $project['id'], $exception);
             }
         }
 

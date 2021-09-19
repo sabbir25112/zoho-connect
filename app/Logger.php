@@ -12,9 +12,10 @@ class Logger
         self::showMessageWithTime($message);
     }
 
-    public static function error($message)
+    public static function error($message, $exception = null)
     {
         Log::error($message);
+        if ($exception) Log::error($exception);
         self::showMessageWithTime($message);
     }
 

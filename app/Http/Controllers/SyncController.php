@@ -4,6 +4,7 @@ use App\Jobs\SyncBugsJob;
 use App\Jobs\SyncSubTaskJob;
 use App\Jobs\SyncTaskJob;
 use App\Jobs\SyncTaskListJob;
+use App\Jobs\SyncTimeSheetJob;
 use App\Jobs\SyncUserJob;
 use App\Models\Bug;
 use App\Models\Project;
@@ -33,16 +34,6 @@ class SyncController extends Controller
     {
         set_time_limit(0);
         $this->token = Settings::first()->access_token;
-    }
-
-    private function prepareJsonColumns($array, $json_columns)
-    {
-        foreach ($json_columns as $column) {
-            if (isset($array[$column])) {
-                $array[$column] = json_encode($array[$column]);
-            }
-        }
-        return $array;
     }
 
     private function getPortals()
@@ -135,6 +126,18 @@ class SyncController extends Controller
         return redirect()->back();
     }
 
+    public function syncTimeSheet(Request $request)
+    {
+        if ($this->isJobInQueue(SyncTimeSheetJob::class)) {
+            session()->flash('error', 'TimeSheet Sync Job already running in background');
+            return redirect()->back();
+        }
+
+        SyncTimeSheetJob::dispatch($request->start_date, $request->end_date);
+
+        session()->flash('success', 'TimeSheet Sync Job running in background. Please check after some time');
+        return redirect()->back();
+    }
 
     private function getProjects($portal)
     {
@@ -173,7 +176,7 @@ class SyncController extends Controller
                     $project['updated_date'] = Carbon::createFromFormat('m-d-Y', $project['updated_date']);
                 }
 
-                $formatted_project_data = $this->prepareJsonColumns($project, $json_columns);
+                $formatted_project_data = prepare_json_columns($project, $json_columns);
 
                 if ($project_model = Project::find($formatted_project_data['id'])) {
                     $project_model->update($formatted_project_data);
@@ -186,105 +189,7 @@ class SyncController extends Controller
         }
     }
 
-    public function syncTimeSheet(Request $request)
-    {
-        $component_types = ['task', 'bug'];
-        $timesheet_columns = Schema::getColumnListing((new TimeSheet())->getTable());
-        $portals = $this->getPortals();
-        foreach ($portals as $portal)
-        {
-            $projects = $this->getProjects($portal);
-
-            foreach ($projects as $project)
-            {
-                foreach ($component_types as $component_type)
-                {
-                    $timesheets = $this->getTimeSheets($project, $request, $component_type);
-                    foreach ($timesheets as $timesheet)
-                    {
-                        try {
-                            $timesheet = Arr::only($timesheet, $timesheet_columns);
-                            $timesheet_data = $this->prepareTimeSheetData($project, $timesheet);
-                            if ($timesheet_model = TimeSheet::find($timesheet_data['id'])) {
-                                $timesheet_model->update($timesheet_data);
-                            } else {
-                                TimeSheet::create($timesheet_data);
-                            }
-                        } catch (\Exception $exception) {
-                            Log::error($exception);
-                            continue;
-                        }
-                    }
-                }
-            }
-        }
-        session()->flash('success', 'TimeSheet Sync Complete');
-        return redirect()->back();
-    }
-
-    private function prepareTimeSheetData($project, $timesheet)
-    {
-        $json_fields = ['link', 'task', 'bug', 'added_by', 'task_list'];
-
-        $timesheet['project_id'] = $project['id'];
-
-        if (isset($timesheet['task']['is_sub_task']) && $timesheet['task']['is_sub_task']) {
-            $timesheet['subtask_id']    = $timesheet['task']['id'] ?? null;
-            $timesheet['subtask_name']  = $timesheet['task']['name'] ?? null;
-            $timesheet['task_id']       = $timesheet['task']['root_task_id'] ?? null;
-        } else {
-            $timesheet['task_id']       = $timesheet['task']['id'] ?? null;
-            $timesheet['task_name']     = $timesheet['task']['name'] ?? null;
-        }
-
-        if (isset($timesheet['created_date'])) {
-            $timesheet['created_date'] = Carbon::createFromFormat('m-d-Y', $timesheet['created_date']);
-        }
-
-        if (isset($timesheet['last_modified_date'])) {
-            $timesheet['last_modified_date'] = Carbon::createFromFormat('m-d-Y', $timesheet['last_modified_date']);
-        }
-
-        return $this->prepareJsonColumns($timesheet, $json_fields);
-    }
-
-    private function getTimeSheets($project, Request $request, $component_type)
-    {
-        $custom_date = ['start_date' => $request->start_date, 'end_date' => $request->end_date];
-        $query_string = '?index=0&range=200&users_list=all&view_type=custom_date&date=' . $request->start_date;
-        $query_string .= "&bill_status=All&component_type=$component_type&";
-        $query_string .= 'custom_date=' . urlencode(json_encode($custom_date));
-
-        $output = [];
-        try {
-            $time_sheet_api = $project['link']['timesheet']['url'] . $query_string;
-            $response = Http::withToken($this->token)->get($time_sheet_api);
-            if ($response->successful()) {
-                $response_json = $response->json();
-                $time_logs = $response_json['timelogs']['date'] ?? [];
-                foreach ($time_logs as $time_log)
-                {
-                    $log_date       = Carbon::createFromFormat('m-d-Y', $time_log['date']);
-                    $log_date_long  = $time_log['date_long'];
-                    $logs = $component_type == 'task' ? $time_log['tasklogs'] : $time_log['buglogs'];
-                    foreach ($logs as $log)
-                    {
-                        $log['log_date']        = $log_date;
-                        $log['log_date_long']   = $log_date_long;
-                        $log['type']            = $component_type;
-                        $output[]               = $log;
-                    }
-                }
-                return $output;
-            }
-            return [];
-        } catch (\Exception $exception) {
-            Log::error($exception);
-            return [];
-        }
-    }
-
-    private function isJobInQueue($jobClassName)
+    private function isJobInQueue($jobClassName): bool
     {
         $queue = DB::table(config('queue.connections.database.table'))->orderBy('id')->get();
         foreach ($queue as $job){

@@ -18,7 +18,8 @@ abstract class ZohoDataSyncer
         $token,
         $refresh_token,
         $with_call_count,
-        $with_output;
+        $with_output,
+        $skip_prediction = true;
 
     abstract function parseResponse($response);
 
@@ -85,7 +86,7 @@ abstract class ZohoDataSyncer
 
                             if ($this->with_output) $response_collection = array_merge($response_collection, $parsed_response);
 
-                            if (count($parsed_response) < $range) {
+                            if ($this->skip_prediction && count($parsed_response) < $range) {
                                 Logger::verbose("Skipping Next Call (Predicted No Content) for ". $this->API. " on index: $index");
                                 break;
                             } else {
@@ -157,5 +158,11 @@ abstract class ZohoDataSyncer
             return $json_response['access_token'] ?? '';
         }
         return '';
+    }
+
+    public function disableSkipPrediction(): ZohoDataSyncer
+    {
+        $this->skip_prediction = false;
+        return $this;
     }
 }

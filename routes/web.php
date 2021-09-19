@@ -39,5 +39,5 @@ Auth::routes(['register' => false]);
 
 Route::get('test-queue', function () {
     $project = \App\Models\Project::find(685798000013322790)->toArray();
-    dd((new \App\Zoho\TaskListSyncer($project))->call(true));
+    dd((new \App\Zoho\TimeSheetSyncer($project, '07-01-2021', '07-30-2021', 'task'))->call(true));
 });

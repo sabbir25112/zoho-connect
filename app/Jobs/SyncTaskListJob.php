@@ -33,12 +33,6 @@ class SyncTaskListJob implements ShouldQueue
      */
     public function handle()
     {
-
-        Logger::verbose("Starting Demo SyncTaskListJob");
-        sleep(60 * 10);
-        Logger::verbose("End Demo SyncTaskListJob");
-        return ;
-
         Logger::verbose("Starting SyncTaskListJob");
 
         $projects = Project::all()->toArray();
