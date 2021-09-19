@@ -14,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
 
 class SyncTaskJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, CommonJobConfig;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ZohoSyncJobConfigTrait;
 
     /**
      * Create a new job instance.
@@ -38,10 +38,14 @@ class SyncTaskJob implements ShouldQueue
         $projects = Project::all()->toArray();
         foreach ($projects as $project)
         {
-            Logger::verbose("Start Processing TaskSyncer for ". $project['id']);
-            (new TaskSyncer($project))->call();
-            Logger::verbose("End Processing TaskSyncer for ". $project['id']);
-            sleep(config('zoho.queue.sleep_after_processing_a_project'));
+            try {
+                Logger::verbose("Start Processing TaskSyncer for ". $project['id']);
+                (new TaskSyncer($project))->call();
+                Logger::verbose("End Processing TaskSyncer for ". $project['id']);
+                sleep(config('zoho.queue.sleep_after_processing_a_project'));
+            } catch (\Exception $exception) {
+                dd($exception);
+            }
         }
 
         Logger::verbose("End SyncTaskJob");

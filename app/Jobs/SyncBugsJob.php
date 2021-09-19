@@ -14,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
 
 class SyncBugsJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, CommonJobConfig;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ZohoSyncJobConfigTrait;
 
     /**
      * Create a new job instance.
@@ -38,10 +38,15 @@ class SyncBugsJob implements ShouldQueue
         $projects = Project::all()->toArray();
         foreach ($projects as $project)
         {
-            Logger::verbose("Start Processing BugSyncer for ". $project['id']);
-            (new BugSyncer($project))->call();
-            Logger::verbose("End Processing BugSyncer for ". $project['id']);
-            sleep(config('zoho.queue.sleep_after_processing_a_project'));
+            try {
+                Logger::verbose("Start Processing BugSyncer for ". $project['id']);
+                (new BugSyncer($project))->call();
+                Logger::verbose("End Processing BugSyncer for ". $project['id']);
+                sleep(config('zoho.queue.sleep_after_processing_a_project'));
+            } catch (\Exception $exception) {
+                Logger::error("Unhandled error for ProjectID ". $project['id']);
+                Logger::error();
+            }
         }
 
         Logger::verbose("End SyncBugsJob");

@@ -3,6 +3,7 @@
 use App\Jobs\SyncBugsJob;
 use App\Jobs\SyncSubTaskJob;
 use App\Jobs\SyncTaskJob;
+use App\Jobs\SyncTaskListJob;
 use App\Jobs\SyncUserJob;
 use App\Models\Bug;
 use App\Models\Project;
@@ -19,56 +20,19 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class SyncController extends Controller
 {
-    const GET_REQUEST = 'get';
-    const POST_REQUEST = 'post';
-    const MAX_REQUEST_PER_MIN = 50;
-
     private $token;
 
     public function __construct()
     {
         set_time_limit(0);
         $this->token = Settings::first()->access_token;
-    }
-
-    private function getResponse($api, $method, $response_key, $perams = [])
-    {
-        $output = [];
-        $has_page = true;
-        $index = 0;
-        do {
-            try {
-                $response = Http::withToken($this->token)->$method($api, $perams + [
-                        'index' => $index,
-                        'range' => 200
-                    ]);
-                if ($response->successful()) {
-                    if ($response->status() == 204) {
-                        Log::info(['api' => $api, 'index' => $index, 'message' => 'NO CONTENT']);
-                        break;
-                    } else {
-                        $output = array_merge($output, $response->json()[$response_key]);
-                        $index += 200;
-                    }
-                }
-                if ($response->failed()) {
-                    Log::error(['api' => $api, 'response' => json_encode($response->json()), 'message' => 'FAILED']);
-                    $has_page = false;
-                    continue;
-                }
-            } catch (\Exception $exception) {
-                Log::error($exception);
-                continue;
-            }
-        } while ($has_page);
-
-        return $output;
     }
 
     private function prepareJsonColumns($array, $json_columns)
@@ -111,60 +75,13 @@ class SyncController extends Controller
         }
     }
 
-    public function syncTaskLists($is_internal = false)
-    {
-        $projects = Project::all()->toArray();
-        if (empty($projects)) {
-            $this->syncProjects(1);
-            $projects = Project::all()->toArray();
-        }
-        foreach ($projects as $project) {
-            $taskLists = $this->getTaskList($project);
-            $this->createOrUpdateTaskList($taskLists, $project);
-        }
-        if (!$is_internal) {
-            session()->flash('success', 'TaskList Sync Complete');
-            return redirect()->back();
-        }
-    }
-
-    public function syncTasksOld($is_internal = false)
-    {
-        $projects = Project::all()->toArray();
-        if (empty($projects)) {
-            $this->syncProjects(1);
-            $projects = Project::all()->toArray();
-        }
-        foreach ($projects as $project) {
-            $tasks = $this->getTask($project);
-            $this->createOrUpdateTask($tasks, $project);
-        }
-        if (!$is_internal) {
-            session()->flash('success', 'Task Sync Complete');
-            return redirect()->back();
-        }
-    }
-
-    public function syncTasksOld2($is_internal = false)
-    {
-        $project = Project::find(request()->get('project'))->toArray();
-        if (!$project) {
-            session()->flash('error', "No Project Found, Please Select a Project");
-            return redirect()->back();
-        }
-        $tasks = $this->getTask($project);
-        $this->createOrUpdateTask($tasks, $project);
-        $bugs = $this->getProjectBugs($project);
-        $this->createOrUpdateProjectBugs($bugs, $project);
-        $this->syncSubTasksByProject($project);
-        if (!$is_internal) {
-            session()->flash('success', 'Task, SubTask and Bug Sync Complete for Project: '. $project['name']);
-            return redirect()->back();
-        }
-    }
-
     public function syncSubTasks()
     {
+        if ($this->isJobInQueue(SyncSubTaskJob::class)) {
+            session()->flash('error', 'Sub Task Sync Job already running in background');
+            return redirect()->back();
+        }
+
         SyncSubTaskJob::dispatch();
         session()->flash('success', 'Sub Task Sync Job running in background. Please check after some time');
         return redirect()->back();
@@ -172,6 +89,11 @@ class SyncController extends Controller
 
     public function syncUsers()
     {
+        if ($this->isJobInQueue(SyncUserJob::class)) {
+            session()->flash('error', 'User Sync Job already running in background');
+            return redirect()->back();
+        }
+
         SyncUserJob::dispatch();
         session()->flash('success', 'User Sync Job running in background. Please check after some time');
         return redirect()->back();
@@ -179,124 +101,38 @@ class SyncController extends Controller
 
     public function syncTasks()
     {
+        if ($this->isJobInQueue(SyncTaskJob::class)) {
+            session()->flash('error', 'Task Sync Job already running in background');
+            return redirect()->back();
+        }
+
         SyncTaskJob::dispatch();
         session()->flash('success', 'Task Sync Job running in background. Please check after some time');
         return redirect()->back();
     }
 
-    public function syncBugs($is_internal = false)
+    public function syncBugs()
     {
+        if ($this->isJobInQueue(SyncBugsJob::class)) {
+            session()->flash('error', 'Bug Sync Job already running in background');
+            return redirect()->back();
+        }
+
         SyncBugsJob::dispatch();
-        session()->flash('success', 'Task Sync Job running in background. Please check after some time');
+        session()->flash('success', 'Bug Sync Job running in background. Please check after some time');
         return redirect()->back();
     }
 
-    private function syncSubTasksByProject($project)
+    public function syncTaskLists()
     {
-        $tasks = Task::where(['project_id' => $project['id'], 'subtasks' => 1])->get()->toArray();
-        $chunked_tasks = array_chunk($tasks, self::MAX_REQUEST_PER_MIN);
-        foreach ($chunked_tasks as $chunked_task)
-        {
-            foreach ($chunked_task as $task)
-            {
-                $sub_task = $this->getSubTasks($task);
-                $this->createOrUpdateSubTask($sub_task, $project);
-            }
-            sleep(30);
+        if ($this->isJobInQueue(SyncTaskListJob::class)) {
+            session()->flash('error', 'TaskList Sync Job already running in background');
+            return redirect()->back();
         }
-    }
 
-    private function getProjectUsers($project)
-    {
-        try {
-            $project['link'] = json_decode($project['link'], 1);
-            $project_user_api = $project['link']['user']['url'];
-            $response = Http::withToken($this->token)->get($project_user_api);
-            if ($response->successful()) {
-                return $response->json()['users'];
-            }
-            if ($response->failed())
-            {
-                session()->flash('error', $response->json()['error']['message']);
-            }
-            return [];
-        } catch (\Exception $exception) {
-            Log::error($exception);
-            return [];
-        }
-    }
-
-    private function getProjectBugs($project)
-    {
-        try {
-            $project['link'] = json_decode($project['link'], 1);
-            $bug_api = $project['link']['bug']['url'];
-            return $this->getResponse($bug_api, self::GET_REQUEST, 'bugs');
-        } catch (\Exception $exception) {
-            Log::error($exception);
-            return [];
-        }
-    }
-
-    private function createOrUpdateProjectUser($users, $project)
-    {
-        $user_columns = Schema::getColumnListing((new User())->getTable());
-
-        foreach ($users as $user)
-        {
-            $user = Arr::only($user, $user_columns);
-
-            try {
-                $user['project_id'] = $project['id'];
-                if ($user_model = User::find($user['id'])) {
-                    $user_model->update($user);
-                } else {
-                    User::create($user);
-                }
-            } catch (\Exception $exception) {
-                Log::error($exception);
-            }
-        }
-    }
-
-    private function createOrUpdateProjectBugs($bugs, $project)
-    {
-
-        $bug_columns = Schema::getColumnListing((new Bug())->getTable());
-        $json_columns = [
-            'link',
-            'severity',
-            'reproducible',
-            'module',
-            'classification',
-            'GROUP_NAME',
-            'status',
-        ];
-        foreach ($bugs as $bug)
-        {
-            $bug = Arr::only($bug, $bug_columns);
-
-            try {
-                $bug['project_id'] = $project['id'];
-
-                if (isset($bug['updated_time'])) {
-                    $bug['updated_time'] = Carbon::createFromFormat('m-d-Y', $bug['updated_time']);
-                }
-
-                if (isset($bug['created_time'])) {
-                    $bug['created_time'] = Carbon::createFromFormat('m-d-Y', $bug['created_time']);
-                }
-
-                $bug = $this->prepareJsonColumns($bug, $json_columns);
-                if ($bug_model = Bug::find($bug['id'])) {
-                    $bug_model->update($bug);
-                } else {
-                    Bug::create($bug);
-                }
-            } catch (\Exception $exception) {
-                Log::error($exception);
-            }
-        }
+        SyncTaskListJob::dispatch();
+        session()->flash('success', 'TaskList Sync Job running in background. Please check after some time');
+        return redirect()->back();
     }
 
 
@@ -344,264 +180,6 @@ class SyncController extends Controller
                 } else {
                     Project::create($formatted_project_data);
                 }
-            } catch (\Exception $exception) {
-                Log::error($exception);
-            }
-        }
-    }
-
-    private function getTaskList($project)
-    {
-        // return json_decode('[{"created_time_long":1599126574243,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:34 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471075\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471075\/"}},"completed":false,"rolled":false,"task_count":{"open":26},"sequence":5,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"01-19-2021","last_updated_time_long":1611048991753,"name":"4th Milestone","id_string":"685798000011471075","id":685798000011471075,"last_updated_time_format":"01-19-2021 08:36:31 PM"},{"created_time_long":1599126567381,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:27 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471071\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471071\/"}},"completed":false,"rolled":false,"task_count":{"closed":6,"open":15},"sequence":4,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"12-03-2020","last_updated_time_long":1606991387255,"name":"3rd Milestone","id_string":"685798000011471071","id":685798000011471071,"last_updated_time_format":"12-03-2020 09:29:47 PM"},{"created_time_long":1599126558721,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:18 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471067\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471067\/"}},"completed":false,"rolled":false,"task_count":{"closed":7,"open":9},"sequence":3,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"11-12-2020","last_updated_time_long":1605170103808,"name":"2nd Milestone","id_string":"685798000011471067","id":685798000011471067,"last_updated_time_format":"11-12-2020 07:35:03 PM"},{"created_time_long":1599126550955,"created_time":"09-03-2020","flag":"internal","created_time_format":"09-03-2020 07:49:10 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471063\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011471063\/"}},"completed":false,"rolled":false,"task_count":{"closed":2,"open":8},"sequence":2,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"10-28-2020","last_updated_time_long":1603859447852,"name":"1st Milestone","id_string":"685798000011471063","id":685798000011471063,"last_updated_time_format":"10-28-2020 03:30:47 PM"},{"created_time_long":1598587181833,"created_time":"08-28-2020","flag":"internal","created_time_format":"08-28-2020 01:59:41 PM","link":{"task":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011410057\/tasks\/"},"self":{"url":"https:\/\/projectsapi.zoho.com\/restapi\/portal\/36249008\/projects\/685798000011352647\/tasklists\/685798000011410057\/"}},"completed":false,"rolled":false,"task_count":{"closed":43,"open":11},"sequence":1,"milestone":{"name":"None","id":685798000000000073},"last_updated_time":"06-23-2021","last_updated_time_long":1624409301865,"name":"General","id_string":"685798000011410057","id":685798000011410057,"last_updated_time_format":"06-23-2021 10:48:21 AM"}]', true);
-        try {
-            $project['link'] = json_decode($project['link'], 1);
-            $taskList_api = $project['link']['tasklist']['url'];
-            $response = Http::withToken($this->token)->get($taskList_api, [
-                'flag' => 'allflag',
-            ]);
-            if ($response->successful()) {
-                return $response->json()['tasklists'];
-            }
-            return [];
-        } catch (\Exception $exception) {
-            Log::error($exception);
-            return [];
-        }
-    }
-
-    private function createOrUpdateTaskList($taskLists, $project)
-    {
-        $taskLists_columns = Schema::getColumnListing((new Tasklist())->getTable());
-        try {
-            foreach ($taskLists as $taskList) {
-                $taskList = Arr::only($taskList, $taskLists_columns);
-                $taskList['project_id'] = $project['id'];
-
-                if (isset($taskList['created_time'])) {
-                    $taskList['created_time'] = Carbon::createFromFormat('m-d-Y', $taskList['created_time']);
-                }
-
-                if (isset($taskList['last_updated_time'])) {
-                    $taskList['last_updated_time'] = Carbon::createFromFormat('m-d-Y', $taskList['last_updated_time']);
-                }
-
-                $formatted_tasklist_data = $this->prepareJsonColumns($taskList, ['task_count', 'link']);
-                if ($taskList_model = Tasklist::find($formatted_tasklist_data['id'])) {
-                    $taskList_model->update($formatted_tasklist_data);
-                } else {
-                    Tasklist::create($formatted_tasklist_data);
-                }
-            }
-        } catch (\Exception $exception) {
-            Log::error($exception);
-        }
-    }
-
-    private function getTaskOld($taskList)
-    {
-        try {
-            $taskList['link'] = json_decode($taskList['link'], 1);
-            $task_api = $taskList['link']['task']['url'];
-            $response = Http::withToken($this->token)->get($task_api);
-            if ($response->successful()) {
-                return $response->json()['tasks'];
-            }
-            return [];
-        } catch (\Exception $exception) {
-            Log::error($exception);
-            return [];
-        }
-    }
-
-    private function getTask($project)
-    {
-        try {
-            $project['link'] = json_decode($project['link'], 1);
-            $task_api = $project['link']['task']['url'];
-            return $this->getResponse($task_api, self::GET_REQUEST, 'tasks');
-        } catch (\Exception $exception) {
-            Log::error($exception);
-            return [];
-        }
-    }
-
-    private function createOrUpdateTask($tasks, $project)
-    {
-        $task_columns = Schema::getColumnListing((new Task())->getTable());
-        try {
-            foreach ($tasks as $task) {
-                $task = Arr::only($task, $task_columns);
-                $task['project_id'] = $project['id'];
-
-                if (isset($task['created_time'])) {
-                    $task['created_time'] = Carbon::createFromFormat('m-d-Y', $task['created_time']);
-                }
-
-                if (isset($task['last_updated_time'])) {
-                    $task['last_updated_time'] = Carbon::createFromFormat('m-d-Y', $task['last_updated_time']);
-                }
-
-                $json_columns = ['details', 'link', 'custom_fields', 'log_hours', 'status'];
-
-                $formatted_task_data = $this->prepareJsonColumns($task, $json_columns);
-                $task_model = Task::find($formatted_task_data['id']);
-                if ($task_model) {
-                    $task_model->update($formatted_task_data);
-                } else {
-                    $task_model = Task::create($formatted_task_data);
-                }
-                $owners = json_decode($task_model->details, true);
-
-                $this->createOrUpdateTaskOwners($owners['owners'] ?? [], $task_model);
-                $this->createOrUpdateTaskStatuses($task['status'] ?? [], $task_model);
-
-                $bills = json_decode($task_model->log_hours, true);
-                $taskBilling = TaskBilling::where('TaskID', $task_model->id)->first();
-                if (!$taskBilling) {
-                    TaskBilling::create([
-                        'non_billable_hours' => $bills['non_billable_hours'] ?? '0',
-                        'billable_hours'     => $bills['billable_hours'] ?? '0',
-                        'TaskID'             => $task_model->id
-                    ]);
-                } else {
-                    $taskBilling->update([
-                        'non_billable_hours' => $bills['non_billable_hours'] ?? '0',
-                        'billable_hours'     => $bills['billable_hours'] ?? '0',
-                    ]);
-                }
-            }
-        } catch (\Exception $exception) {
-            Log::error($exception);
-        }
-    }
-
-    private function createOrUpdateTaskOwners($owners, $task)
-    {
-        foreach ($owners as $owner)
-        {
-            try {
-                if (!isset($owner['id'])) continue;
-
-                $ownerData = [
-                    'TaskID'    => $task->id,
-                    'OwnerID'   => $owner['id'],
-                    'name'      => $owner['name'] ?? '',
-                    'email'     => $owner['email'] ?? '',
-                    'zpuid'     => $owner['zpuid'] ?? '',
-                ];
-                if ($taskOwner = TaskOwner::find($owner['id'])) {
-                    $taskOwner->update($ownerData);
-                } else {
-                    TaskOwner::create($ownerData);
-                }
-            } catch (\Exception $exception) {
-                Log::error($exception);
-            }
-        }
-    }
-
-    private function createOrUpdateTaskStatuses($status, $task)
-    {
-        try {
-            if (!isset($status['id'])) return ;
-            $statusData = [
-                'status_id' => $status['id'],
-                'TaskID'    => $task->id,
-                'name'      => $status['name'],
-                'type'      => $status['type']
-            ];
-            $taskStatus = TaskStatus::where('status_id', $status['id'])
-                                ->where('TaskID', $task->id)
-                                ->first();
-            if ($taskStatus) {
-                $taskStatus->update($statusData);
-            } else {
-                TaskStatus::create($statusData);
-            }
-        } catch (\Exception $exception) {
-            Log::error($exception);
-        }
-    }
-
-    private function createOrUpdateTaskCustoms($customs, $task)
-    {
-        foreach ($customs as $custom)
-        {
-            try {
-                if (!isset($custom['label_name']) || !isset($custom['label_value'])) continue;
-
-                $customData = [
-                    'TaskID'     => $task->id,
-                    'label_name' => $custom['label_name'],
-                    'label_value'=> $custom['label_value'],
-                ];
-
-                $taskCustom = TaskCustom::where('TaskID', $task->id)
-                                ->where('label_name', $custom['label_name'])
-                                ->first();
-                if ($taskCustom) {
-                    $taskCustom->update($customData);
-                } else {
-                    TaskCustom::create($customData);
-                }
-            } catch (\Exception $exception) {
-                Log::error($exception);
-            }
-        }
-    }
-
-    private function getSubTasks($task)
-    {
-        try {
-            $task['link'] = json_decode($task['link'], true);
-            if (!isset($task['link']['subtask']['url'])) return [];
-            $sub_task_api = $task['link']['subtask']['url'];
-            $response = Http::withToken($this->token)->get($sub_task_api);
-            if ($response->successful()) {
-                return $response->json()['tasks'];
-            }
-            return [];
-        } catch (\Exception $exception) {
-            Log::error($exception);
-            return [];
-        }
-    }
-
-    private function createOrUpdateSubTask($tasks, $project)
-    {
-        $task_columns = Schema::getColumnListing((new SubTask())->getTable());
-        foreach ($tasks as $task) {
-            try {
-                $task = Arr::only($task, $task_columns);
-                $task['percent_complete'] = (float) $task['percent_complete'];
-                $task['project_id'] = $project['id'];
-
-                if (isset($task['created_time'])) {
-                    $task['created_time'] = Carbon::createFromFormat('m-d-Y', $task['created_time']);
-                }
-
-                if (isset($task['last_updated_time'])) {
-                    $task['last_updated_time'] = Carbon::createFromFormat('m-d-Y', $task['last_updated_time']);
-                }
-
-                $json_columns = [
-                    'details',
-                    'custom_fields',
-                    'task_followers',
-                    'GROUP_NAME',
-                    'log_hours',
-                    'tasklist',
-                    'status',
-                    'link',
-                ];
-
-                $formatted_task_data = $this->prepareJsonColumns($task, $json_columns);
-                if ($task_model = SubTask::find($formatted_task_data['id'])) {
-                    $task_model->update($formatted_task_data);
-                } else {
-                    $task_model = SubTask::create($formatted_task_data);
-                }
-                $this->createOrUpdateTaskCustoms($formatted_task_data['custom_fields'] ? json_decode($formatted_task_data['custom_fields'], true) : [], $task_model);
             } catch (\Exception $exception) {
                 Log::error($exception);
             }
@@ -704,5 +282,17 @@ class SyncController extends Controller
             Log::error($exception);
             return [];
         }
+    }
+
+    private function isJobInQueue($jobClassName)
+    {
+        $queue = DB::table(config('queue.connections.database.table'))->orderBy('id')->get();
+        foreach ($queue as $job){
+            $payload = json_decode($job->payload,true);
+            if($payload['displayName'] == $jobClassName){
+                return true;
+            }
+        }
+        return false;
     }
 }

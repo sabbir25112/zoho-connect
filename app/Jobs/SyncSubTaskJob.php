@@ -15,7 +15,7 @@ use Illuminate\Queue\SerializesModels;
 
 class SyncSubTaskJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, CommonJobConfig;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, ZohoSyncJobConfigTrait;
 
     /**
      * Create a new job instance.
@@ -52,7 +52,7 @@ class SyncSubTaskJob implements ShouldQueue
                 foreach ($chunked_task as $task)
                 {
                     $process_response = (new SubTaskSyncer($task, $project))->call(true);
-                    Logger::verbose("Request Count: " . $request_count . " . It made ". $process_response['call_count'] . " call(s) for ". $task['id']);
+                    Logger::verbose("Request Count: " . $request_count . " . It made ". $process_response['call_count'] . " call(s) for TaskID: ". $task['id']);
                     $request_count += $process_response['call_count'];
 
                     if ($request_count > $max_request_per_min) {
